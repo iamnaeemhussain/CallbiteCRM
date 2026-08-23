@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   User,
@@ -27,6 +27,8 @@ import {
   Sparkles,
   AlertTriangle,
   ArrowRight,
+  RotateCcw,
+  Check,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { Badge, getStatusBadge } from '../components/common/Badge';
@@ -63,12 +65,23 @@ export const CustomerProfile: React.FC = () => {
   const [editingEsim, setEditingEsim] = useState<any | null>(null);
   const [renewingEsim, setRenewingEsim] = useState<any | null>(null);
   const [qrModalEsim, setQrModalEsim] = useState<any | null>(null);
+
+  // Transactions Modals
   const [isAddTransactionOpen, setIsAddTransactionOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<any | null>(null);
+
+  // Support Modals
   const [isAddSupportOpen, setIsAddSupportOpen] = useState(false);
   const [editingSupport, setEditingSupport] = useState<any | null>(null);
+
+  // Interaction Modal
   const [isAddInteractionOpen, setIsAddInteractionOpen] = useState(false);
+
+  // Task Modals
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<any | null>(null);
+
+  // Note Modals
   const [isAddNoteOpen, setIsAddNoteOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<any | null>(null);
 
@@ -79,29 +92,57 @@ export const CustomerProfile: React.FC = () => {
   const toast = useToast();
   const navigate = useNavigate();
 
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     if (!id) return;
     setIsLoading(true);
     try {
       const res = await api.get(`/api/customers/${id}`);
-      if (res.success) {
+      if (res && res.success) {
         setData(res);
       } else {
-        toast.error(res.error || 'Customer not found.');
+        toast.error(res?.error || 'Customer could not be loaded.');
       }
     } catch (err: any) {
       toast.error(err.message || 'Failed to load customer profile.');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [id, toast]);
 
   useEffect(() => {
     loadProfile();
-  }, [id]);
+  }, [loadProfile]);
 
   const setTab = (tabName: string) => {
     setSearchParams({ tab: tabName });
+  };
+
+  // Quick 1-click resolve support ticket
+  const handleQuickResolveTicket = async (ticket: any) => {
+    try {
+      await api.put(`/api/support/${ticket.id}`, {
+        status: 'Resolved',
+        resolution: ticket.resolution || 'Issue resolved by staff member.',
+      });
+      toast.success(`Ticket #${ticket.id} marked as Resolved!`);
+      loadProfile();
+    } catch (err: any) {
+      toast.error('Failed to resolve ticket.');
+    }
+  };
+
+  // Quick toggle task completed
+  const handleToggleTaskStatus = async (task: any) => {
+    const nextStatus = task.status === 'Completed' ? 'Pending' : 'Completed';
+    try {
+      await api.put(`/api/tasks/${task.id}`, {
+        status: nextStatus,
+      });
+      toast.success(`Task marked as ${nextStatus}!`);
+      loadProfile();
+    } catch (err: any) {
+      toast.error('Failed to update task status.');
+    }
   };
 
   // Generic deletion handler
@@ -113,7 +154,7 @@ export const CustomerProfile: React.FC = () => {
         toast.success('eSIM cancelled and removed.');
       } else if (deleteConfirm.type === 'transaction') {
         await api.delete(`/api/transactions/${deleteConfirm.id}`);
-        toast.success('Transaction removed.');
+        toast.success('Transaction removed from ledger.');
       } else if (deleteConfirm.type === 'support') {
         await api.delete(`/api/support/${deleteConfirm.id}`);
         toast.success('Support ticket deleted.');
@@ -132,20 +173,7 @@ export const CustomerProfile: React.FC = () => {
     }
   };
 
-  const handleToggleTaskStatus = async (task: any) => {
-    const nextStatus = task.status === 'Completed' ? 'Pending' : 'Completed';
-    try {
-      await api.put(`/api/tasks/${task.id}`, {
-        status: nextStatus,
-      });
-      toast.success(`Task marked as ${nextStatus}!`);
-      loadProfile();
-    } catch (err: any) {
-      toast.error('Failed to update task status.');
-    }
-  };
-
-  if (isLoading) {
+  if (isLoading && !data) {
     return <LoadingSpinner label="Loading complete Customer 360 profile..." />;
   }
 
@@ -162,7 +190,11 @@ export const CustomerProfile: React.FC = () => {
     );
   }
 
-  const { customer, esims, transactions, support_tickets, interactions, tasks, notes, timeline, referred_customers, metrics } = data;
+  const { customer, esims, transactions, support_tickets, interactions, tasks, notes, timeline, referred_customers } = data;
+
+  // Calculate dynamic lifetime metrics from transactions
+  const totalSpent = (transactions || []).reduce((acc: number, t: any) => acc + (t.payment_status === 'Paid' ? (Number(t.selling_price) || 0) : 0), 0);
+  const totalProfit = (transactions || []).reduce((acc: number, t: any) => acc + (t.payment_status === 'Paid' ? (Number(t.profit) || (Number(t.selling_price) - Number(t.cost_price))) : 0), 0);
 
   const tabs = [
     { id: 'esims', label: `eSIMs (${esims?.length || 0})`, icon: SimCard },
@@ -269,8 +301,9 @@ export const CustomerProfile: React.FC = () => {
             <Button
               variant="secondary"
               size="sm"
-              leftIcon={<DollarSign className="w-3.5 h-3.5" />}
+              leftIcon={<DollarSign className="w-3.5 h-3.5 text-emerald-600" />}
               onClick={() => setIsAddTransactionOpen(true)}
+              className="font-bold border-slate-300"
             >
               Payment
             </Button>
@@ -279,7 +312,7 @@ export const CustomerProfile: React.FC = () => {
             <Button
               variant="secondary"
               size="sm"
-              leftIcon={<HelpCircle className="w-3.5 h-3.5" />}
+              leftIcon={<HelpCircle className="w-3.5 h-3.5 text-rose-500" />}
               onClick={() => setIsAddSupportOpen(true)}
             >
               Ticket
@@ -289,7 +322,7 @@ export const CustomerProfile: React.FC = () => {
             <Button
               variant="secondary"
               size="sm"
-              leftIcon={<CheckSquare className="w-3.5 h-3.5" />}
+              leftIcon={<CheckSquare className="w-3.5 h-3.5 text-purple-600" />}
               onClick={() => setIsAddTaskOpen(true)}
             >
               Task
@@ -299,7 +332,7 @@ export const CustomerProfile: React.FC = () => {
             <Button
               variant="secondary"
               size="sm"
-              leftIcon={<FileText className="w-3.5 h-3.5" />}
+              leftIcon={<FileText className="w-3.5 h-3.5 text-slate-600" />}
               onClick={() => setIsAddNoteOpen(true)}
             >
               Note
@@ -322,13 +355,13 @@ export const CustomerProfile: React.FC = () => {
           {/* WhatsApp Phone */}
           <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
             <span className="text-[10px] font-bold uppercase text-slate-400 block mb-0.5">WhatsApp</span>
-            <span className="font-mono font-bold text-slate-900">{customer.whatsapp_number}</span>
+            <span className="font-mono font-bold text-slate-900 select-all">{customer.whatsapp_number}</span>
           </div>
 
           {/* Email */}
           <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
             <span className="text-[10px] font-bold uppercase text-slate-400 block mb-0.5">Email</span>
-            <span className="font-medium text-slate-800 truncate block">{customer.email || '—'}</span>
+            <span className="font-medium text-slate-800 truncate block select-all">{customer.email || '—'}</span>
           </div>
 
           {/* Location */}
@@ -355,11 +388,11 @@ export const CustomerProfile: React.FC = () => {
             </div>
           </div>
 
-          {/* Total Spent */}
+          {/* Total Spent in PKR */}
           <div className="p-3 bg-emerald-50/60 rounded-2xl border border-emerald-100">
             <span className="text-[10px] font-bold uppercase text-emerald-800 block mb-0.5">Lifetime Purchases</span>
             <span className="font-bold text-emerald-900 text-sm">
-              {formatPrice(metrics?.total_spent)}
+              {formatPrice(totalSpent)}
             </span>
           </div>
 
@@ -426,7 +459,7 @@ export const CustomerProfile: React.FC = () => {
               <SimCard className="w-10 h-10 text-slate-300 mx-auto mb-3" />
               <h4 className="text-sm font-bold text-slate-800">No eSIMs attached yet</h4>
               <p className="text-xs text-slate-400 mt-1 mb-4">
-                Add an eSIM profile with package details and ICCID.
+                Add an eSIM profile with package bundle, carrier provider, and ICCID.
               </p>
               <Button size="sm" onClick={() => setIsAddEsimOpen(true)}>
                 Add First eSIM
@@ -490,7 +523,7 @@ export const CustomerProfile: React.FC = () => {
                           </div>
                         )}
 
-                        {/* eSIM Specific Tag visible below APN */}
+                        {/* eSIM Specific Tag located below APN */}
                         <div className="flex items-center justify-between text-[11px] pt-1">
                           <span className="text-slate-400">eSIM Tag:</span>
                           <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-900 text-emerald-400 border border-slate-800">
@@ -517,9 +550,7 @@ export const CustomerProfile: React.FC = () => {
                         <Button
                           variant="ghost"
                           size="xs"
-                          onClick={() => {
-                            setIsWhatsAppOpen(true);
-                          }}
+                          onClick={() => setIsWhatsAppOpen(true)}
                         >
                           WhatsApp
                         </Button>
@@ -537,14 +568,16 @@ export const CustomerProfile: React.FC = () => {
                           Renew
                         </Button>
 
-                        {/* Edit */}
-                        <button
-                          title="Edit eSIM"
+                        {/* Edit eSIM */}
+                        <Button
+                          variant="secondary"
+                          size="xs"
+                          leftIcon={<Edit2 className="w-3 h-3 text-emerald-600" />}
                           onClick={() => setEditingEsim(e)}
-                          className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+                          className="border-slate-300 font-semibold"
                         >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
+                          Edit
+                        </Button>
 
                         {/* Cancel / Delete */}
                         <button
@@ -556,7 +589,7 @@ export const CustomerProfile: React.FC = () => {
                               name: `${e.package_name} (${e.iccid})`,
                             })
                           }
-                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -574,22 +607,39 @@ export const CustomerProfile: React.FC = () => {
       {activeTab === 'transactions' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-base font-bold text-slate-900">
-              Purchase & Payment History ({transactions?.length || 0})
-            </h3>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">
+                Purchase & Payment History ({transactions?.length || 0})
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Every purchase, renewal, and package change with profit margins
+              </p>
+            </div>
             <Button
               variant="primary"
               size="sm"
               leftIcon={<Plus className="w-4 h-4" />}
-              onClick={() => setIsAddTransactionOpen(true)}
+              onClick={() => {
+                setEditingTransaction(null);
+                setIsAddTransactionOpen(true);
+              }}
             >
               Record Payment
             </Button>
           </div>
 
           {transactions?.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-12 text-center text-slate-400 text-xs">
-              No transactions recorded yet.
+            <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-12 text-center text-slate-400 text-xs space-y-3">
+              <Receipt className="w-10 h-10 text-slate-300 mx-auto" />
+              <p className="font-semibold text-slate-700">No transactions recorded yet for {customer.full_name}.</p>
+              <Button
+                size="sm"
+                variant="primary"
+                leftIcon={<Plus className="w-4 h-4" />}
+                onClick={() => setIsAddTransactionOpen(true)}
+              >
+                Record First Payment
+              </Button>
             </div>
           ) : (
             <div className="overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-card">
@@ -602,7 +652,7 @@ export const CustomerProfile: React.FC = () => {
                     <th className="px-4 py-3.5">Cost / Profit</th>
                     <th className="px-4 py-3.5">Method & Status</th>
                     <th className="px-4 py-3.5">Date & Staff</th>
-                    <th className="px-4 py-3.5 text-right">Actions</th>
+                    <th className="px-5 py-3.5 text-right">Actions (Edit / Remove)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -635,19 +685,34 @@ export const CustomerProfile: React.FC = () => {
                         <div>{formatDate(t.date, true)}</div>
                         <div className="text-[11px] text-slate-400">By: {t.staff_name || 'Staff'}</div>
                       </td>
-                      <td className="px-4 py-3.5 text-right">
-                        <button
-                          onClick={() =>
-                            setDeleteConfirm({
-                              type: 'transaction',
-                              id: t.id,
-                              name: `${t.transaction_type} (${formatPrice(t.selling_price)})`,
-                            })
-                          }
-                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                      <td className="px-5 py-3.5 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* Edit Transaction */}
+                          <Button
+                            variant="secondary"
+                            size="xs"
+                            leftIcon={<Edit2 className="w-3 h-3 text-emerald-600" />}
+                            onClick={() => {
+                              setEditingTransaction(t);
+                              setIsAddTransactionOpen(true);
+                            }}
+                          >
+                            Edit
+                          </Button>
+                          <button
+                            onClick={() =>
+                              setDeleteConfirm({
+                                type: 'transaction',
+                                id: t.id,
+                                name: `${t.transaction_type} (${formatPrice(t.selling_price)})`,
+                              })
+                            }
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                            title="Delete Transaction"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -662,22 +727,39 @@ export const CustomerProfile: React.FC = () => {
       {activeTab === 'support' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-base font-bold text-slate-900">
-              Support History & Requests ({support_tickets?.length || 0})
-            </h3>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">
+                Support History & Requests ({support_tickets?.length || 0})
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Technical inquiries, APN guidance, and customer issue tracking
+              </p>
+            </div>
             <Button
               variant="primary"
               size="sm"
               leftIcon={<Plus className="w-4 h-4" />}
-              onClick={() => setIsAddSupportOpen(true)}
+              onClick={() => {
+                setEditingSupport(null);
+                setIsAddSupportOpen(true);
+              }}
             >
-              Open Ticket
+              Open Support Ticket
             </Button>
           </div>
 
           {support_tickets?.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-12 text-center text-slate-400 text-xs">
-              No support tickets logged for this customer.
+            <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-12 text-center text-slate-400 text-xs space-y-3">
+              <HelpCircle className="w-10 h-10 text-slate-300 mx-auto" />
+              <p className="font-semibold text-slate-700">No support tickets logged for {customer.full_name}.</p>
+              <Button
+                size="sm"
+                variant="primary"
+                leftIcon={<Plus className="w-4 h-4" />}
+                onClick={() => setIsAddSupportOpen(true)}
+              >
+                Create First Ticket
+              </Button>
             </div>
           ) : (
             <div className="space-y-3">
@@ -697,14 +779,39 @@ export const CustomerProfile: React.FC = () => {
 
                     <div className="flex items-center gap-2">
                       {getStatusBadge(s.status)}
+                      {s.status !== 'Resolved' && s.status !== 'Closed' && (
+                        <Button
+                          variant="success"
+                          size="xs"
+                          leftIcon={<Check className="w-3 h-3" />}
+                          onClick={() => handleQuickResolveTicket(s)}
+                        >
+                          Quick Resolve
+                        </Button>
+                      )}
                       <Button
-                        variant="ghost"
+                        variant="secondary"
                         size="xs"
-                        leftIcon={<Edit2 className="w-3 h-3" />}
-                        onClick={() => setEditingSupport(s)}
+                        leftIcon={<Edit2 className="w-3 h-3 text-emerald-600" />}
+                        onClick={() => {
+                          setEditingSupport(s);
+                          setIsAddSupportOpen(true);
+                        }}
                       >
-                        Update
+                        Edit / Update
                       </Button>
+                      <button
+                        onClick={() =>
+                          setDeleteConfirm({
+                            type: 'support',
+                            id: s.id,
+                            name: `Ticket #${s.id}`,
+                          })
+                        }
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
 
@@ -723,7 +830,7 @@ export const CustomerProfile: React.FC = () => {
                   )}
 
                   <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-400 pt-1">
-                    <span>Created on: {formatDate(s.created_at, true)}</span>
+                    <span>Created: {formatDate(s.created_at, true)}</span>
                     <span>Assigned: {s.assigned_staff_name || 'Unassigned'}</span>
                   </div>
                 </div>
@@ -737,9 +844,14 @@ export const CustomerProfile: React.FC = () => {
       {activeTab === 'interactions' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-base font-bold text-slate-900">
-              Customer Contact History ({interactions?.length || 0})
-            </h3>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">
+                Customer Contact History ({interactions?.length || 0})
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Logged WhatsApp chats, phone calls, and communication outcomes
+              </p>
+            </div>
             <Button
               variant="primary"
               size="sm"
@@ -751,8 +863,12 @@ export const CustomerProfile: React.FC = () => {
           </div>
 
           {interactions?.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-12 text-center text-slate-400 text-xs">
-              No contacts logged yet.
+            <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-12 text-center text-slate-400 text-xs space-y-3">
+              <MessageSquare className="w-10 h-10 text-slate-300 mx-auto" />
+              <p className="font-semibold text-slate-700">No communication logged yet.</p>
+              <Button size="sm" onClick={() => setIsAddInteractionOpen(true)}>
+                Record First Call / WhatsApp Contact
+              </Button>
             </div>
           ) : (
             <div className="space-y-3">
@@ -799,22 +915,34 @@ export const CustomerProfile: React.FC = () => {
       {activeTab === 'tasks' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-base font-bold text-slate-900">
-              Customer Tasks & Follow-ups ({tasks?.length || 0})
-            </h3>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">
+                Customer Tasks & Follow-ups ({tasks?.length || 0})
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Scheduled reminders, renewal calls, and action items
+              </p>
+            </div>
             <Button
               variant="primary"
               size="sm"
               leftIcon={<Plus className="w-4 h-4" />}
-              onClick={() => setIsAddTaskOpen(true)}
+              onClick={() => {
+                setEditingTask(null);
+                setIsAddTaskOpen(true);
+              }}
             >
               Add Task
             </Button>
           </div>
 
           {tasks?.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-12 text-center text-slate-400 text-xs">
-              No tasks scheduled for this customer.
+            <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-12 text-center text-slate-400 text-xs space-y-3">
+              <CheckSquare className="w-10 h-10 text-slate-300 mx-auto" />
+              <p className="font-semibold text-slate-700">No tasks scheduled for {customer.full_name}.</p>
+              <Button size="sm" onClick={() => setIsAddTaskOpen(true)}>
+                Schedule Follow-up Reminder
+              </Button>
             </div>
           ) : (
             <div className="space-y-2.5">
@@ -834,7 +962,8 @@ export const CustomerProfile: React.FC = () => {
                         type="checkbox"
                         checked={isDone}
                         onChange={() => handleToggleTaskStatus(t)}
-                        className="w-4 h-4 mt-1 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                        className="w-5 h-5 mt-0.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                        title="Click to toggle completed"
                       />
                       <div>
                         <div className="flex items-center gap-2">
@@ -852,13 +981,19 @@ export const CustomerProfile: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => setEditingTask(t)}
-                        className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {/* Edit Task Button */}
+                      <Button
+                        variant="secondary"
+                        size="xs"
+                        leftIcon={<Edit2 className="w-3 h-3 text-emerald-600" />}
+                        onClick={() => {
+                          setEditingTask(t);
+                          setIsAddTaskOpen(true);
+                        }}
                       >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
+                        Edit
+                      </Button>
                       <button
                         onClick={() =>
                           setDeleteConfirm({
@@ -867,7 +1002,7 @@ export const CustomerProfile: React.FC = () => {
                             name: `${t.task_type}`,
                           })
                         }
-                        className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -891,7 +1026,10 @@ export const CustomerProfile: React.FC = () => {
               variant="primary"
               size="sm"
               leftIcon={<Plus className="w-4 h-4" />}
-              onClick={() => setIsAddNoteOpen(true)}
+              onClick={() => {
+                setEditingNote(null);
+                setIsAddNoteOpen(true);
+              }}
             >
               Add Note
             </Button>
@@ -920,7 +1058,10 @@ export const CustomerProfile: React.FC = () => {
 
                     <div className="flex items-center gap-1">
                       <button
-                        onClick={() => setEditingNote(n)}
+                        onClick={() => {
+                          setEditingNote(n);
+                          setIsAddNoteOpen(true);
+                        }}
                         className="p-1 text-slate-400 hover:text-slate-700 rounded-lg"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
@@ -1036,9 +1177,9 @@ export const CustomerProfile: React.FC = () => {
           customerName={customer.full_name}
           phone={customer.whatsapp_number}
           contextData={{
-            packageName: esims.length > 0 ? esims[0].package_name : undefined,
-            expiryDate: esims.length > 0 ? formatDate(esims[0].expiry_date) : undefined,
-            iccid: esims.length > 0 ? esims[0].iccid : undefined,
+            packageName: esims?.length > 0 ? esims[0].package_name : undefined,
+            expiryDate: esims?.length > 0 ? formatDate(esims[0].expiry_date) : undefined,
+            iccid: esims?.length > 0 ? esims[0].iccid : undefined,
           }}
           onInteractionLogged={() => loadProfile()}
         />
@@ -1079,25 +1220,30 @@ export const CustomerProfile: React.FC = () => {
           iccid={qrModalEsim.iccid}
           packageName={qrModalEsim.package_name}
           customerName={customer.full_name}
+          onQrUpdated={() => loadProfile()}
         />
       )}
 
-      {/* Transaction Modal */}
+      {/* Record / Edit Transaction Modal */}
       {isAddTransactionOpen && (
         <TransactionFormModal
           isOpen={isAddTransactionOpen}
-          onClose={() => setIsAddTransactionOpen(false)}
+          onClose={() => {
+            setIsAddTransactionOpen(false);
+            setEditingTransaction(null);
+          }}
           customerId={customer.id}
           customerName={customer.full_name}
           customerEsims={esims}
+          transaction={editingTransaction}
           onSuccess={() => loadProfile()}
         />
       )}
 
-      {/* Support Ticket Modal */}
-      {(isAddSupportOpen || editingSupport) && (
+      {/* Support Ticket Modal (Create / Edit) */}
+      {isAddSupportOpen && (
         <SupportTicketModal
-          isOpen={isAddSupportOpen || Boolean(editingSupport)}
+          isOpen={isAddSupportOpen}
           onClose={() => {
             setIsAddSupportOpen(false);
             setEditingSupport(null);
@@ -1121,10 +1267,10 @@ export const CustomerProfile: React.FC = () => {
         />
       )}
 
-      {/* Task Modal */}
-      {(isAddTaskOpen || editingTask) && (
+      {/* Task Modal (Create / Edit) */}
+      {isAddTaskOpen && (
         <TaskFormModal
-          isOpen={isAddTaskOpen || Boolean(editingTask)}
+          isOpen={isAddTaskOpen}
           onClose={() => {
             setIsAddTaskOpen(false);
             setEditingTask(null);
@@ -1137,10 +1283,10 @@ export const CustomerProfile: React.FC = () => {
         />
       )}
 
-      {/* Note Modal */}
-      {(isAddNoteOpen || editingNote) && (
+      {/* Note Modal (Create / Edit) */}
+      {isAddNoteOpen && (
         <NoteFormModal
-          isOpen={isAddNoteOpen || Boolean(editingNote)}
+          isOpen={isAddNoteOpen}
           onClose={() => {
             setIsAddNoteOpen(false);
             setEditingNote(null);
