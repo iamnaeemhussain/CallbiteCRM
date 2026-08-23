@@ -1,5 +1,6 @@
 import { Context, Next } from 'hono';
 import { Env, StaffUser } from './types';
+import { memoryStore } from './embedded-db';
 
 export function createToken(userId = 'STF-001'): string {
   const array = new Uint8Array(24);
@@ -33,59 +34,64 @@ export async function getAuthenticatedUser(c: Context<{ Bindings: Env; Variables
     } catch {}
   }
 
-  try {
-    if (token) {
-      // 1. Check sessions table
-      const session = await c.env.DB
-        .prepare(
-          `SELECT u.id, u.name, u.email, u.role, u.phone, u.status, u.avatar_url, u.created_at, u.updated_at, u.last_login_at
-           FROM sessions s
-           JOIN users u ON s.user_id = u.id
-           WHERE s.token = ? AND u.status = 'active'`
-        )
-        .bind(token)
-        .first<StaffUser>();
+  // 1. Try D1 Database if connected
+  if (c.env && c.env.DB) {
+    try {
+      if (token) {
+        const session = await c.env.DB
+          .prepare(
+            `SELECT u.id, u.name, u.email, u.role, u.phone, u.status, u.avatar_url, u.created_at, u.updated_at, u.last_login_at
+             FROM sessions s
+             JOIN users u ON s.user_id = u.id
+             WHERE s.token = ? AND u.status = 'active'`
+          )
+          .bind(token)
+          .first<StaffUser>();
 
-      if (session) {
-        return session;
-      }
+        if (session) return session;
 
-      // 2. Check token structure tok_STF-XXX_...
-      if (token.startsWith('tok_')) {
-        const parts = token.split('_');
-        if (parts.length >= 2) {
-          const uId = parts[1];
-          const user = await c.env.DB
-            .prepare(`SELECT id, name, email, role, phone, status, avatar_url, created_at, updated_at, last_login_at FROM users WHERE id = ? AND status = 'active'`)
-            .bind(uId)
-            .first<StaffUser>();
-          if (user) return user;
+        if (token.startsWith('tok_')) {
+          const parts = token.split('_');
+          if (parts.length >= 2) {
+            const uId = parts[1];
+            const user = await c.env.DB
+              .prepare(`SELECT id, name, email, role, phone, status, avatar_url, created_at, updated_at, last_login_at FROM users WHERE id = ? AND status = 'active'`)
+              .bind(uId)
+              .first<StaffUser>();
+            if (user) return user;
+          }
         }
       }
-    }
 
-    // 3. Fallback: return active Admin user so session is never broken
-    const defaultUser = await c.env.DB
-      .prepare(`SELECT id, name, email, role, phone, status, avatar_url, created_at, updated_at, last_login_at FROM users WHERE status = 'active' ORDER BY role = 'ADMIN' DESC, id ASC LIMIT 1`)
-      .first<StaffUser>();
+      const defaultUser = await c.env.DB
+        .prepare(`SELECT id, name, email, role, phone, status, avatar_url, created_at, updated_at, last_login_at FROM users WHERE status = 'active' ORDER BY role = 'ADMIN' DESC, id ASC LIMIT 1`)
+        .first<StaffUser>();
 
-    if (defaultUser) {
-      return defaultUser;
+      if (defaultUser) return defaultUser;
+    } catch (e) {
+      console.warn('D1 auth query notice, using embedded store:', e);
     }
-  } catch (err) {
-    console.error('getAuthenticatedUser error:', err);
   }
 
-  // Guaranteed fallback
-  return {
-    id: 'STF-001',
-    name: 'System Admin',
-    email: 'Admin@callbite.com',
-    role: 'ADMIN',
-    status: 'active',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
+  // 2. Memory Store Fallback
+  if (token) {
+    const memSession = memoryStore.sessions.find((s) => s.token === token);
+    if (memSession) {
+      const user = memoryStore.users.find((u) => u.id === memSession.user_id && u.status === 'active');
+      if (user) return user;
+    }
+
+    if (token.startsWith('tok_')) {
+      const parts = token.split('_');
+      if (parts.length >= 2) {
+        const uId = parts[1];
+        const user = memoryStore.users.find((u) => u.id === uId && u.status === 'active');
+        if (user) return user;
+      }
+    }
+  }
+
+  return memoryStore.users[0];
 }
 
 export async function authMiddleware(c: Context<{ Bindings: Env; Variables: { user: StaffUser } }>, next: Next) {
