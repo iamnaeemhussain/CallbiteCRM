@@ -6,7 +6,7 @@ class ApiClient {
 
   constructor() {
     if (typeof window !== 'undefined') {
-      this.token = localStorage.getItem(TOKEN_KEY) || 'tok_STF-001_default_session_token';
+      this.token = localStorage.getItem(TOKEN_KEY);
     }
   }
 
@@ -21,7 +21,7 @@ class ApiClient {
     }
   }
 
-  getToken(): string {
+  getToken(): string | null {
     if (this.token) return this.token;
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem(TOKEN_KEY);
@@ -30,22 +30,31 @@ class ApiClient {
         return stored;
       }
     }
-    return 'tok_STF-001_default_session_token';
+    return null;
   }
 
   private async request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const token = this.getToken();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'x-callbite-token': token,
       ...((options.headers as Record<string, string>) || {}),
     };
+
+    const token = this.getToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+      headers['x-callbite-token'] = token;
+    }
 
     const response = await fetch(endpoint, {
       ...options,
       headers,
     });
+
+    const isLoginEndpoint = endpoint.includes('/api/auth/login');
+
+    if (response.status === 401 && !isLoginEndpoint) {
+      this.setToken(null);
+    }
 
     const data = await response.json().catch(() => ({ success: false, error: 'Invalid response from server' }));
 

@@ -2,19 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { StaffUser } from '../types';
 import { api, TOKEN_KEY, USER_KEY } from '../utils/api';
 
-const DEFAULT_ADMIN_USER: StaffUser = {
-  id: 'STF-001',
-  name: 'System Admin',
-  email: 'Admin@callbite.com',
-  role: 'ADMIN',
-  phone: '+923000000001',
-  status: 'active',
-  created_at: '2026-01-01T00:00:00Z',
-  updated_at: '2026-08-23T00:00:00Z',
-};
-
 interface AuthContextType {
-  user: StaffUser;
+  user: StaffUser | null;
   isLoading: boolean;
   login: (token: string, user: StaffUser) => void;
   logout: () => Promise<void>;
@@ -25,38 +14,74 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<StaffUser>(() => {
+  const [user, setUser] = useState<StaffUser | null>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(USER_KEY);
-      if (saved) {
+      const savedToken = localStorage.getItem(TOKEN_KEY);
+      const savedUser = localStorage.getItem(USER_KEY);
+      if (savedToken && savedUser) {
         try {
-          return JSON.parse(saved);
+          return JSON.parse(savedUser);
         } catch {
-          return DEFAULT_ADMIN_USER;
+          return null;
         }
       }
     }
-    return DEFAULT_ADMIN_USER;
+    return null;
   });
 
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const savedToken = localStorage.getItem(TOKEN_KEY);
+      return Boolean(savedToken);
+    }
+    return false;
+  });
 
   useEffect(() => {
-    async function checkMe() {
+    let isCancelled = false;
+
+    async function checkSession() {
+      const token = api.getToken();
+      if (!token) {
+        if (!isCancelled) {
+          setUser(null);
+          setIsLoading(false);
+        }
+        return;
+      }
+
       try {
         const res = await api.get('/api/auth/me');
+        if (isCancelled) return;
+
         if (res && res.success && res.user) {
           setUser(res.user);
           if (typeof window !== 'undefined') {
             localStorage.setItem(USER_KEY, JSON.stringify(res.user));
           }
+        } else {
+          api.setToken(null);
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem(USER_KEY);
+            localStorage.removeItem(TOKEN_KEY);
+          }
+          setUser(null);
         }
       } catch (err) {
-        // Keep active default user
+        if (isCancelled) return;
+        console.warn('Session verification notice:', err);
+      } finally {
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
       }
     }
 
-    checkMe();
+    checkSession();
+
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
   const login = (token: string, newUser: StaffUser) => {
@@ -80,7 +105,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.removeItem(USER_KEY);
         localStorage.removeItem(TOKEN_KEY);
       }
-      setUser(DEFAULT_ADMIN_USER);
+      setUser(null);
+      setIsLoading(false);
       window.location.href = '/login';
     }
   };

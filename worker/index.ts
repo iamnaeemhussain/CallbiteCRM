@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { Env, StaffUser } from './types';
+import { ensureDbInitialized } from './db';
 import authApp from './routes/auth';
 import dashboardApp from './routes/dashboard';
 import customersApp from './routes/customers';
@@ -28,6 +29,14 @@ app.use('*', cors({
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true,
 }));
+
+// Ensure Database Schema is verified on API requests
+app.use('/api/*', async (c, next) => {
+  if (c.env && c.env.DB) {
+    await ensureDbInitialized(c.env.DB);
+  }
+  await next();
+});
 
 // Mount API sub-routers
 app.route('/api/auth', authApp);
