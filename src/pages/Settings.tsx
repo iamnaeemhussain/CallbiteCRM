@@ -28,8 +28,8 @@ export const Settings: React.FC = () => {
 
   // Form states for general settings & templates
   const [companyName, setCompanyName] = useState('');
-  const [currencySymbol, setCurrencySymbol] = useState('$');
-  const [currencyCode, setCurrencyCode] = useState('USD');
+  const [currencySymbol, setCurrencySymbol] = useState('Rs.');
+  const [currencyCode, setCurrencyCode] = useState('PKR');
   const [supportPhone, setSupportPhone] = useState('');
   const [waRenewal, setWaRenewal] = useState('');
   const [waExpiry, setWaExpiry] = useState('');
@@ -45,8 +45,8 @@ export const Settings: React.FC = () => {
   const [presetData, setPresetData] = useState('10GB');
   const [presetDuration, setPresetDuration] = useState('30 Days');
   const [presetProvider, setPresetProvider] = useState('Partner');
-  const [presetSellingPrice, setPresetSellingPrice] = useState('18.00');
-  const [presetCostPrice, setPresetCostPrice] = useState('11.50');
+  const [presetSellingPrice, setPresetSellingPrice] = useState('4500');
+  const [presetCostPrice, setPresetCostPrice] = useState('2800');
 
   // Tag Modal
   const [isTagModalOpen, setIsTagModalOpen] = useState(false);
@@ -58,8 +58,8 @@ export const Settings: React.FC = () => {
   useEffect(() => {
     if (settings) {
       setCompanyName(settings.company_name || 'Callbite Esim');
-      setCurrencySymbol(settings.currency_symbol || '$');
-      setCurrencyCode(settings.currency_code || 'USD');
+      setCurrencySymbol(settings.currency_symbol || 'Rs.');
+      setCurrencyCode(settings.currency_code || 'PKR');
       setSupportPhone(settings.support_phone || '+923001234567');
       setWaRenewal(settings.wa_template_renewal || '');
       setWaExpiry(settings.wa_template_expiry || '');
@@ -265,7 +265,7 @@ export const Settings: React.FC = () => {
                 type="text"
                 value={currencySymbol}
                 onChange={(e) => setCurrencySymbol(e.target.value)}
-                placeholder="$ / Rs / AED"
+                placeholder="Rs. / PKR / $"
                 className="w-full text-sm rounded-xl border border-slate-300 px-3.5 py-2 text-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
               />
             </div>
@@ -278,7 +278,7 @@ export const Settings: React.FC = () => {
                 type="text"
                 value={currencyCode}
                 onChange={(e) => setCurrencyCode(e.target.value)}
-                placeholder="USD / PKR / AED"
+                placeholder="PKR / USD / AED"
                 className="w-full text-sm rounded-xl border border-slate-300 px-3.5 py-2 text-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
               />
             </div>
@@ -368,9 +368,9 @@ export const Settings: React.FC = () => {
                   setPresetName('');
                   setPresetData('10GB');
                   setPresetDuration('30 Days');
-                  setPresetProvider('Callbite Partner');
-                  setPresetSellingPrice('18.00');
-                  setPresetCostPrice('11.50');
+                  setPresetProvider(providers.length > 0 ? providers[0].name : 'Callbite Partner');
+                  setPresetSellingPrice('4500');
+                  setPresetCostPrice('2800');
                   setIsPresetModalOpen(true);
                 }}
               >
@@ -402,9 +402,9 @@ export const Settings: React.FC = () => {
                 <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
                   <div>
                     <span className="text-xs font-bold text-slate-900 block">
-                      Selling: {currencySymbol}{p.default_selling_price}
+                      Selling: {currencySymbol} {Number(p.default_selling_price).toLocaleString()}
                     </span>
-                    <span className="text-[11px] text-slate-400">Cost: {currencySymbol}{p.default_cost_price}</span>
+                    <span className="text-[11px] text-slate-400">Cost: {currencySymbol} {Number(p.default_cost_price).toLocaleString()}</span>
                   </div>
 
                   {isAdmin && (
@@ -598,20 +598,20 @@ export const Settings: React.FC = () => {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Selling Price ($)</label>
+                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Selling Price ({currencySymbol})</label>
                 <input
                   type="number"
-                  step="0.01"
+                  step="1"
                   value={presetSellingPrice}
                   onChange={(e) => setPresetSellingPrice(e.target.value)}
                   className="w-full text-sm rounded-xl border border-slate-300 px-3 py-1.5"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Cost Price ($)</label>
+                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Cost Price ({currencySymbol})</label>
                 <input
                   type="number"
-                  step="0.01"
+                  step="1"
                   value={presetCostPrice}
                   onChange={(e) => setPresetCostPrice(e.target.value)}
                   className="w-full text-sm rounded-xl border border-slate-300 px-3 py-1.5"

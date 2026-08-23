@@ -1,6 +1,6 @@
-export function formatCurrency(amount: number | string | undefined | null, symbol = '$'): string {
+export function formatCurrency(amount: number | string | undefined | null, symbol = 'Rs.'): string {
   const num = Number(amount || 0);
-  return `${symbol}${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${symbol} ${num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
 export function formatDate(dateStr?: string | null, includeTime = false): string {

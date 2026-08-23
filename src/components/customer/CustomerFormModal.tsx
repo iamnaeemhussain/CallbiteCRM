@@ -21,7 +21,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
   customer,
   onSuccess,
 }) => {
-  const { tags: availableTags, staffList, presets, providers } = useSettings();
+  const { tags: availableTags, staffList, presets, packages, providers, currencySymbol, formatPrice } = useSettings();
   const { user } = useAuth();
   const toast = useToast();
 
@@ -54,8 +54,8 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
   const [esimData, setEsimData] = useState('10GB');
   const [esimDuration, setEsimDuration] = useState('30 Days');
   const [esimExpiry, setEsimExpiry] = useState('');
-  const [esimPrice, setEsimPrice] = useState('18.00');
-  const [esimCost, setEsimCost] = useState('11.50');
+  const [esimPrice, setEsimPrice] = useState('4500');
+  const [esimCost, setEsimCost] = useState('2800');
   const [esimPaymentMethod, setEsimPaymentMethod] = useState('Easypaisa');
 
   // Load customer list for referral select
@@ -113,21 +113,27 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
     }
   }, [customer, user, isOpen]);
 
-  // Handle Preset selection for initial eSIM
+  // Handle Preset or Package selection for initial eSIM
   const handlePresetSelect = (presetIdStr: string) => {
     setSelectedPresetId(presetIdStr);
-    const preset = presets.find((p) => String(p.id) === presetIdStr);
-    if (preset) {
-      setEsimCountry(preset.country_region);
-      setEsimProvider(preset.provider);
-      setEsimPackage(preset.package_name);
-      setEsimData(preset.data_allowance);
-      setEsimDuration(preset.duration);
-      setEsimPrice(preset.default_selling_price.toString());
-      setEsimCost(preset.default_cost_price.toString());
+    const cleanId = presetIdStr.replace(/^pkg_/, '').replace(/^preset_/, '');
+    const found =
+      packages.find((p) => String(p.id) === cleanId || String(p.id) === presetIdStr) ||
+      presets.find((p) => String(p.id) === cleanId || String(p.id) === presetIdStr);
+
+    if (found) {
+      setEsimCountry(found.country_region);
+      setEsimProvider(found.provider);
+      setEsimPackage(found.package_name);
+      setEsimData(found.data_allowance);
+      setEsimDuration(found.duration);
+      const sell = (found as any).selling_price ?? (found as any).default_selling_price ?? 4500;
+      const cost = (found as any).cost_price ?? (found as any).default_cost_price ?? 2800;
+      setEsimPrice(sell.toString());
+      setEsimCost(cost.toString());
 
       // Parse duration to calculate expiry
-      const daysMatch = preset.duration.match(/(\d+)\s*Days?/i);
+      const daysMatch = found.duration.match(/(\d+)\s*Days?/i);
       const days = daysMatch ? parseInt(daysMatch[1], 10) : 30;
       const d = new Date();
       d.setDate(d.getDate() + days);
@@ -467,11 +473,17 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
                     className="text-xs rounded-lg border border-emerald-300 bg-white px-2 py-1 text-slate-800"
                   >
                     <option value="">-- Or choose a package preset --</option>
-                    {presets.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.country_region}: {p.package_name} ({p.data_allowance}) - ${p.default_selling_price}
-                      </option>
-                    ))}
+                    {packages && packages.length > 0
+                      ? packages.map((p) => (
+                          <option key={`pkg_${p.id}`} value={`pkg_${p.id}`}>
+                            {p.country_region}: {p.package_name} ({p.data_allowance}) - {currencySymbol} {p.selling_price.toLocaleString()}
+                          </option>
+                        ))
+                      : presets.map((p) => (
+                          <option key={`preset_${p.id}`} value={`preset_${p.id}`}>
+                            {p.country_region}: {p.package_name} ({p.data_allowance}) - {currencySymbol} {p.default_selling_price.toLocaleString()}
+                          </option>
+                        ))}
                   </select>
                 </div>
 
@@ -539,15 +551,15 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
 
                   <div>
                     <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
-                      Selling Price ($) & Method
+                      Selling Price ({currencySymbol}) & Method
                     </label>
                     <div className="grid grid-cols-2 gap-1.5">
                       <input
                         type="number"
-                        step="0.01"
+                        step="1"
                         value={esimPrice}
                         onChange={(e) => setEsimPrice(e.target.value)}
-                        className="w-full text-xs rounded-lg border border-slate-300 px-2 py-1.5 text-slate-900 bg-white"
+                        className="w-full text-xs font-mono font-bold rounded-lg border border-slate-300 px-2 py-1.5 text-slate-900 bg-white"
                       />
                       <select
                         value={esimPaymentMethod}
