@@ -145,7 +145,7 @@ staffApp.post('/', async (c) => {
     });
   } catch (err: any) {
     console.error('Create staff error:', err);
-    return c.json({ success: false, error: 'Failed to create staff member.' }, 500);
+    return c.json({ success: false, error: err.message || 'Failed to create staff member.' }, 500);
   }
 });
 

@@ -377,23 +377,44 @@ export async function logAudit(
 
 export async function generateId(db: D1Database, table: string, prefix: string, startNumber = 1001): Promise<string> {
   try {
-    const result = await db
-      .prepare(`SELECT id FROM ${table} WHERE id LIKE ? ORDER BY LENGTH(id) DESC, id DESC LIMIT 1`)
+    const results = await db
+      .prepare(`SELECT id FROM ${table} WHERE id LIKE ?`)
       .bind(`${prefix}-%`)
-      .first<{ id: string }>();
+      .all<{ id: string }>();
 
-    if (!result || !result.id) {
-      return `${prefix}-${startNumber}`;
+    let maxNum = 0;
+    let maxPadLength = 0;
+
+    if (results && results.results && results.results.length > 0) {
+      for (const row of results.results) {
+        if (!row || !row.id) continue;
+        const match = row.id.match(new RegExp(`^${prefix}-(\\d+)`));
+        if (match && match[1]) {
+          const num = parseInt(match[1], 10);
+          if (!isNaN(num)) {
+            if (num > maxNum) {
+              maxNum = num;
+              maxPadLength = match[1].length;
+            }
+          }
+        }
+      }
     }
 
-    const match = result.id.match(new RegExp(`^${prefix}-(\\d+)`));
-    if (match && match[1]) {
-      const nextNum = parseInt(match[1], 10) + 1;
-      return `${prefix}-${nextNum}`;
+    if (maxNum === 0) {
+      // Check if startNumber has formatting
+      const startStr = String(startNumber);
+      return `${prefix}-${startStr}`;
     }
 
-    return `${prefix}-${Date.now().toString().slice(-4)}`;
+    const nextNum = maxNum + 1;
+    // If the existing format was zero-padded (e.g. STF-001 -> STF-006, STF-010)
+    if (maxPadLength > 0 && String(nextNum).length < maxPadLength) {
+      return `${prefix}-${String(nextNum).padStart(maxPadLength, '0')}`;
+    }
+
+    return `${prefix}-${nextNum}`;
   } catch (err) {
-    return `${prefix}-${Math.floor(1000 + Math.random() * 9000)}`;
+    return `${prefix}-${Date.now().toString().slice(-4)}${Math.floor(100 + Math.random() * 900)}`;
   }
 }
