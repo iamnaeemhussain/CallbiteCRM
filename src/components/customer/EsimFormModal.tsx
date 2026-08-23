@@ -118,9 +118,9 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
       setIccid(generatedIccid);
       setCountryRegion('Pakistan');
       setProvider('Jazz / Zong Pakistan Hub');
-      setProviderId('PRV-106');
-      setPackageName('Pakistan 10GB Standard');
-      setPackageId('PKG-101');
+      setProviderId('');
+      setPackageName('');
+      setPackageId('');
       setDataAllowance('10GB');
       setDuration('30 Days');
 

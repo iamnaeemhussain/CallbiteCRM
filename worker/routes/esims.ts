@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Env, StaffUser, Esim } from '../types';
 import { authMiddleware } from '../auth';
-import { memoryStore } from '../embedded-db';
+import { logTimeline, logAudit, generateId } from '../db';
 
 const esimsApp = new Hono<{ Bindings: Env; Variables: { user: StaffUser } }>();
 
@@ -11,166 +11,515 @@ esimsApp.use('*', authMiddleware);
 esimsApp.get('/', async (c) => {
   try {
     const db = c.env.DB;
-    const { search, status, country, provider } = c.req.query();
+    const {
+      search,
+      status,
+      country,
+      provider,
+      customer_id,
+      expiry_range,
+      sort_by = 'created_at',
+      order = 'desc',
+      page = '1',
+      limit = '50',
+    } = c.req.query();
 
-    if (db) {
-      try {
-        let query = `
-          SELECT 
-            e.*,
-            c.full_name AS customer_name,
-            c.whatsapp_number AS customer_phone,
-            u.name AS created_by_staff_name
-          FROM esims e
-          JOIN customers c ON e.customer_id = c.id
-          LEFT JOIN users u ON e.created_by_staff_id = u.id
-          WHERE e.is_deleted = 0 AND c.is_deleted = 0
-        `;
-        const params: any[] = [];
-        if (status) { query += ` AND e.status = ?`; params.push(status); }
-        if (country) { query += ` AND e.country_region LIKE ?`; params.push(`%${country}%`); }
-        if (provider) { query += ` AND e.provider LIKE ?`; params.push(`%${provider}%`); }
-        if (search) { query += ` AND (e.iccid LIKE ? OR e.package_name LIKE ? OR c.full_name LIKE ?)`; params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
-        query += ` ORDER BY e.created_at DESC LIMIT 100`;
+    let query = `
+      SELECT 
+        e.*,
+        c.full_name AS customer_name,
+        c.whatsapp_number AS customer_phone,
+        u.name AS created_by_staff_name
+      FROM esims e
+      JOIN customers c ON e.customer_id = c.id
+      LEFT JOIN users u ON e.created_by_staff_id = u.id
+      WHERE e.is_deleted = 0 AND c.is_deleted = 0
+    `;
 
-        const results = await db.prepare(query).bind(...params).all<any>();
-        if (results && results.results && results.results.length > 0) {
-          return c.json({
-            success: true,
-            esims: results.results,
-            pagination: { total: results.results.length, page: 1, limit: 50, totalPages: 1 },
-          });
-        }
-      } catch (e) {}
+    const params: any[] = [];
+
+    if (customer_id) {
+      query += ` AND e.customer_id = ?`;
+      params.push(customer_id);
     }
 
-    // Memory Store Fallback
-    let list = [...memoryStore.esims];
-    if (status) list = list.filter((e) => e.status === status);
-    if (country) list = list.filter((e) => e.country_region.toLowerCase().includes(country.toLowerCase()));
-    if (provider) list = list.filter((e) => e.provider.toLowerCase().includes(provider.toLowerCase()));
+    if (search && search.trim()) {
+      const s = `%${search.trim()}%`;
+      query += ` AND (
+        e.iccid LIKE ? OR
+        e.id LIKE ? OR
+        e.package_name LIKE ? OR
+        e.country_region LIKE ? OR
+        e.provider LIKE ? OR
+        e.tag LIKE ? OR
+        c.full_name LIKE ? OR
+        c.whatsapp_number LIKE ?
+      )`;
+      params.push(s, s, s, s, s, s, s, s);
+    }
 
-    const populated = list.map((e) => {
-      const cust = memoryStore.customers.find((c) => c.id === e.customer_id) || memoryStore.customers[0];
-      return {
-        ...e,
-        customer_name: cust.full_name,
-        customer_phone: cust.whatsapp_number,
+    if (status) {
+      query += ` AND e.status = ?`;
+      params.push(status);
+    }
+
+    if (country) {
+      query += ` AND e.country_region LIKE ?`;
+      params.push(`%${country}%`);
+    }
+
+    if (provider) {
+      query += ` AND e.provider LIKE ?`;
+      params.push(`%${provider}%`);
+    }
+
+    if (expiry_range) {
+      const now = new Date();
+      const todayStr = now.toISOString().slice(0, 10);
+      const addDays = (days: number) => {
+        const d = new Date();
+        d.setDate(d.getDate() + days);
+        return d.toISOString().slice(0, 10);
       };
-    });
+
+      if (expiry_range === 'expired') {
+        query += ` AND e.expiry_date < ?`;
+        params.push(todayStr);
+      } else if (expiry_range === 'today') {
+        query += ` AND e.expiry_date = ?`;
+        params.push(todayStr);
+      } else if (expiry_range === '3_days') {
+        query += ` AND e.expiry_date >= ? AND e.expiry_date <= ?`;
+        params.push(todayStr, addDays(3));
+      } else if (expiry_range === '7_days') {
+        query += ` AND e.expiry_date >= ? AND e.expiry_date <= ?`;
+        params.push(todayStr, addDays(7));
+      }
+    }
+
+    const sortCol = sort_by === 'created_at' ? 'e.created_at' : sort_by === 'expiry_date' ? 'e.expiry_date' : 'e.created_at';
+    const sortDir = order.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+
+    query += ` ORDER BY ${sortCol} ${sortDir}`;
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
+    const offset = (pageNum - 1) * limitNum;
+
+    const countQuery = `SELECT COUNT(*) AS total FROM (${query})`;
+    const countResult = await db.prepare(countQuery).bind(...params).first<{ total: number }>();
+    const total = countResult?.total || 0;
+
+    query += ` LIMIT ? OFFSET ?`;
+    params.push(limitNum, offset);
+
+    const results = await db.prepare(query).bind(...params).all<any>();
 
     return c.json({
       success: true,
-      esims: populated,
-      pagination: { total: populated.length, page: 1, limit: 50, totalPages: 1 },
+      esims: results.results || [],
+      pagination: {
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(total / limitNum),
+      },
     });
   } catch (err: any) {
-    return c.json({ success: true, esims: memoryStore.esims, pagination: { total: memoryStore.esims.length, page: 1, limit: 50, totalPages: 1 } });
+    console.error('List esims error:', err);
+    return c.json({ success: true, esims: [], pagination: { total: 0, page: 1, limit: 50, totalPages: 1 } });
   }
 });
 
 // Single eSIM
 esimsApp.get('/:id', async (c) => {
   try {
+    const db = c.env.DB;
     const esimId = c.req.param('id');
-    const found = memoryStore.esims.find((e) => e.id === esimId) || memoryStore.esims[0];
-    const cust = memoryStore.customers.find((c) => c.id === found.customer_id) || memoryStore.customers[0];
+
+    const esim = await db
+      .prepare(
+        `SELECT 
+          e.*,
+          c.full_name AS customer_name,
+          c.whatsapp_number AS customer_phone,
+          c.email AS customer_email,
+          c.status AS customer_status,
+          u.name AS created_by_staff_name
+         FROM esims e
+         JOIN customers c ON e.customer_id = c.id
+         LEFT JOIN users u ON e.created_by_staff_id = u.id
+         WHERE e.id = ? AND e.is_deleted = 0`
+      )
+      .bind(esimId)
+      .first<any>();
+
+    if (!esim) {
+      return c.json({ success: false, error: 'eSIM not found.' }, 404);
+    }
+
+    const transactions = await db
+      .prepare(`SELECT t.*, u.name AS staff_name FROM transactions t LEFT JOIN users u ON t.staff_id = u.id WHERE t.esim_id = ? ORDER BY t.date DESC`)
+      .bind(esimId)
+      .all<any>();
+
+    const supportTickets = await db
+      .prepare(`SELECT s.*, u.name AS assigned_staff_name FROM support_tickets s LEFT JOIN users u ON s.assigned_staff_id = u.id WHERE s.esim_id = ? ORDER BY s.created_at DESC`)
+      .bind(esimId)
+      .all<any>();
 
     return c.json({
       success: true,
-      esim: { ...found, customer_name: cust.full_name, customer_phone: cust.whatsapp_number },
-      transactions: memoryStore.transactions.filter((t) => t.esim_id === found.id),
-      support_tickets: memoryStore.support_tickets.filter((s) => s.esim_id === found.id),
+      esim,
+      transactions: transactions.results || [],
+      support_tickets: supportTickets.results || [],
     });
   } catch (err: any) {
-    return c.json({ success: false, error: 'eSIM not found.' }, 404);
+    return c.json({ success: false, error: 'Failed to load eSIM.' }, 500);
   }
 });
 
 // Create eSIM
 esimsApp.post('/', async (c) => {
   try {
-    const body = await c.req.json<any>();
-    const now = new Date().toISOString();
-    const esimId = `ESIM-${2000 + memoryStore.esims.length + 1}`;
+    const db = c.env.DB;
+    const currentUser = c.get('user');
+    const body = await c.req.json<{
+      customer_id: string;
+      iccid: string;
+      country_region: string;
+      provider: string;
+      provider_id?: string;
+      package_name: string;
+      package_id?: string;
+      data_allowance: string;
+      duration: string;
+      start_date?: string;
+      expiry_date: string;
+      activation_date?: string;
+      status?: string;
+      qr_code_data?: string;
+      apn_info?: string;
+      tag?: string;
+      notes?: string;
+      selling_price?: number;
+      cost_price?: number;
+      payment_method?: string;
+      record_transaction?: boolean;
+    }>();
 
-    const newEsim = {
-      id: esimId,
-      customer_id: body.customer_id,
-      iccid: body.iccid,
-      country_region: body.country_region || 'Pakistan',
-      provider: body.provider || 'Jazz / Zong Pakistan Hub',
-      provider_id: body.provider_id || 'PRV-106',
-      package_name: body.package_name,
-      package_id: body.package_id || 'PKG-101',
-      data_allowance: body.data_allowance || '10GB',
-      duration: body.duration || '30 Days',
-      start_date: body.start_date || now.slice(0, 10),
-      expiry_date: body.expiry_date,
-      status: (body.status || 'Active') as any,
-      qr_code_data: body.qr_code_data || null,
-      apn_info: body.apn_info || 'APN: internet',
-      tag: body.tag || 'Primary SIM',
-      notes: body.notes || null,
-      created_by_staff_id: 'STF-001',
-      created_at: now,
-      updated_at: now,
-    };
-
-    memoryStore.esims.unshift(newEsim);
-
-    if (c.env && c.env.DB) {
-      try {
-        await c.env.DB
-          .prepare(
-            `INSERT INTO esims (id, customer_id, iccid, country_region, provider, package_name, data_allowance, duration, start_date, expiry_date, status, qr_code_data, apn_info, tag, notes, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-          )
-          .bind(esimId, body.customer_id, body.iccid, body.country_region, body.provider, body.package_name, body.data_allowance, body.duration, body.start_date, body.expiry_date, body.status || 'Active', body.qr_code_data || null, body.apn_info || null, body.tag || null, body.notes || null, now, now)
-          .run();
-      } catch (e) {}
+    if (!body.customer_id) {
+      return c.json({ success: false, error: 'Customer is required.' }, 400);
+    }
+    if (!body.iccid || !body.iccid.trim()) {
+      return c.json({ success: false, error: 'ICCID is required.' }, 400);
+    }
+    if (!body.package_name || !body.expiry_date) {
+      return c.json({ success: false, error: 'Package Name and Expiry Date are required.' }, 400);
     }
 
-    return c.json({ success: true, message: 'eSIM added successfully.', esim_id: esimId });
+    const dup = await db
+      .prepare(`SELECT id FROM esims WHERE iccid = ? AND is_deleted = 0`)
+      .bind(body.iccid.trim())
+      .first<{ id: string }>();
+
+    if (dup) {
+      return c.json({ success: false, error: `ICCID "${body.iccid.trim()}" already exists in the system (eSIM ID: ${dup.id}).` }, 400);
+    }
+
+    const customer = await db
+      .prepare(`SELECT id, full_name FROM customers WHERE id = ? AND is_deleted = 0`)
+      .bind(body.customer_id)
+      .first<{ id: string; full_name: string }>();
+
+    if (!customer) {
+      return c.json({ success: false, error: 'Target customer does not exist.' }, 404);
+    }
+
+    const now = new Date().toISOString();
+    const esimId = await generateId(db, 'esims', 'ESIM', 2001);
+
+    await db
+      .prepare(
+        `INSERT INTO esims (
+          id, customer_id, iccid, country_region, provider, provider_id,
+          package_name, package_id, data_allowance, duration, start_date,
+          expiry_date, renewal_date, activation_date, status, qr_code_data,
+          apn_info, tag, notes, created_by_staff_id, is_deleted, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
+      )
+      .bind(
+        esimId,
+        body.customer_id,
+        body.iccid.trim(),
+        body.country_region || 'Pakistan',
+        body.provider || 'Callbite Partner',
+        body.provider_id || null,
+        body.package_name.trim(),
+        body.package_id || null,
+        body.data_allowance || '10GB',
+        body.duration || '30 Days',
+        body.start_date || now.slice(0, 10),
+        body.expiry_date,
+        body.activation_date || now.slice(0, 10),
+        body.status || 'Active',
+        body.qr_code_data?.trim() || null,
+        body.apn_info?.trim() || null,
+        body.tag?.trim() || 'Primary SIM',
+        body.notes?.trim() || null,
+        currentUser.id,
+        now,
+        now
+      )
+      .run();
+
+    await logTimeline(db, {
+      customer_id: body.customer_id,
+      staff_id: currentUser.id,
+      action_type: 'ESIM_ADDED',
+      title: `eSIM Added: ${body.package_name}`,
+      description: `${currentUser.name} added ${body.package_name} (${body.data_allowance}) - ICCID: ${body.iccid.trim()}${body.tag ? ' [' + body.tag + ']' : ''}. Expires ${body.expiry_date}.`,
+      metadata: { iccid: body.iccid.trim(), package: body.package_name, expiry_date: body.expiry_date, tag: body.tag },
+    });
+
+    const clientIp = c.req.header('cf-connecting-ip') || '127.0.0.1';
+    await logAudit(db, {
+      staff_id: currentUser.id,
+      staff_name: currentUser.name,
+      action: 'CREATE',
+      record_type: 'ESIM',
+      record_id: esimId,
+      new_value: { customer_id: body.customer_id, iccid: body.iccid, package: body.package_name, tag: body.tag },
+      change_summary: `Added eSIM ${body.package_name} (${body.iccid}) for ${customer.full_name}`,
+      ip_address: clientIp,
+    });
+
+    // Optional initial purchase recording in PKR
+    if (body.record_transaction && body.selling_price !== undefined && body.selling_price >= 0) {
+      const txnId = await generateId(db, 'transactions', 'TXN', 3001);
+      const sell = Number(body.selling_price || 0);
+      const cost = Number(body.cost_price || 0);
+      const profit = sell - cost;
+
+      await db
+        .prepare(
+          `INSERT INTO transactions (
+            id, customer_id, esim_id, transaction_type, package_name,
+            data_allowance, duration, date, selling_price, cost_price,
+            profit, currency, payment_method, payment_status, staff_id,
+            notes, created_at, updated_at
+          ) VALUES (?, ?, ?, 'New eSIM', ?, ?, ?, ?, ?, ?, ?, 'PKR', ?, 'Paid', ?, ?, ?, ?)`
+        )
+        .bind(
+          txnId,
+          body.customer_id,
+          esimId,
+          body.package_name,
+          body.data_allowance,
+          body.duration,
+          now,
+          sell,
+          cost,
+          profit,
+          body.payment_method || 'Easypaisa',
+          currentUser.id,
+          'Purchase recorded upon adding eSIM',
+          now,
+          now
+        )
+        .run();
+
+      await logTimeline(db, {
+        customer_id: body.customer_id,
+        staff_id: currentUser.id,
+        action_type: 'TRANSACTION_RECORDED',
+        title: `Purchase Recorded (Rs. ${sell.toLocaleString()})`,
+        description: `Payment recorded via ${body.payment_method || 'Easypaisa'} for ${body.package_name}.`,
+        metadata: { amount: sell, method: body.payment_method, txn_id: txnId },
+      });
+    }
+
+    return c.json({
+      success: true,
+      message: 'eSIM added successfully.',
+      esim_id: esimId,
+    });
   } catch (err: any) {
-    return c.json({ success: false, error: err.message }, 500);
+    console.error('Create esim error:', err);
+    return c.json({ success: false, error: err.message || 'Failed to create eSIM.' }, 500);
   }
 });
 
 // Update eSIM
 esimsApp.put('/:id', async (c) => {
   try {
+    const db = c.env.DB;
+    const currentUser = c.get('user');
     const esimId = c.req.param('id');
-    const body = await c.req.json<any>();
+    const body = await c.req.json<Partial<Esim>>();
 
-    const found = memoryStore.esims.find((e) => e.id === esimId);
-    if (found) {
-      Object.assign(found, body);
+    const existing = await db
+      .prepare(`SELECT * FROM esims WHERE id = ? AND is_deleted = 0`)
+      .bind(esimId)
+      .first<Esim>();
+
+    if (!existing) {
+      return c.json({ success: false, error: 'eSIM not found.' }, 404);
     }
 
-    if (c.env && c.env.DB) {
-      try {
-        await c.env.DB
-          .prepare(`UPDATE esims SET package_name = ?, data_allowance = ?, duration = ?, expiry_date = ?, status = ?, qr_code_data = ?, apn_info = ?, tag = ?, notes = ?, updated_at = ? WHERE id = ?`)
-          .bind(body.package_name, body.data_allowance, body.duration, body.expiry_date, body.status, body.qr_code_data, body.apn_info, body.tag, body.notes, new Date().toISOString(), esimId)
-          .run();
-      } catch (e) {}
+    if (body.iccid && body.iccid.trim() !== existing.iccid) {
+      const dup = await db
+        .prepare(`SELECT id FROM esims WHERE iccid = ? AND id != ? AND is_deleted = 0`)
+        .bind(body.iccid.trim(), esimId)
+        .first<{ id: string }>();
+
+      if (dup) {
+        return c.json({ success: false, error: `ICCID "${body.iccid.trim()}" is already assigned to another eSIM.` }, 400);
+      }
+    }
+
+    const now = new Date().toISOString();
+    const changes: string[] = [];
+
+    if (body.package_name && body.package_name !== existing.package_name) {
+      changes.push(`Package: ${existing.package_name} → ${body.package_name}`);
+    }
+    if (body.data_allowance && body.data_allowance !== existing.data_allowance) {
+      changes.push(`Data: ${existing.data_allowance} → ${body.data_allowance}`);
+    }
+    if (body.expiry_date && body.expiry_date !== existing.expiry_date) {
+      changes.push(`Expiry: ${existing.expiry_date} → ${body.expiry_date}`);
+    }
+    if (body.status && body.status !== existing.status) {
+      changes.push(`Status: ${existing.status} → ${body.status}`);
+    }
+    if (body.tag && body.tag !== existing.tag) {
+      changes.push(`Tag: ${existing.tag || 'None'} → ${body.tag}`);
+    }
+
+    await db
+      .prepare(
+        `UPDATE esims SET
+          iccid = ?,
+          country_region = ?,
+          provider = ?,
+          provider_id = ?,
+          package_name = ?,
+          package_id = ?,
+          data_allowance = ?,
+          duration = ?,
+          start_date = ?,
+          expiry_date = ?,
+          renewal_date = ?,
+          activation_date = ?,
+          status = ?,
+          qr_code_data = ?,
+          apn_info = ?,
+          tag = ?,
+          notes = ?,
+          updated_at = ?
+         WHERE id = ?`
+      )
+      .bind(
+        body.iccid !== undefined ? body.iccid.trim() : existing.iccid,
+        body.country_region !== undefined ? body.country_region : existing.country_region,
+        body.provider !== undefined ? body.provider : existing.provider,
+        body.provider_id !== undefined ? body.provider_id : existing.provider_id,
+        body.package_name !== undefined ? body.package_name.trim() : existing.package_name,
+        body.package_id !== undefined ? body.package_id : existing.package_id,
+        body.data_allowance !== undefined ? body.data_allowance : existing.data_allowance,
+        body.duration !== undefined ? body.duration : existing.duration,
+        body.start_date !== undefined ? body.start_date : existing.start_date,
+        body.expiry_date !== undefined ? body.expiry_date : existing.expiry_date,
+        body.renewal_date !== undefined ? body.renewal_date : existing.renewal_date,
+        body.activation_date !== undefined ? body.activation_date : existing.activation_date,
+        body.status !== undefined ? body.status : existing.status,
+        body.qr_code_data !== undefined ? body.qr_code_data : existing.qr_code_data,
+        body.apn_info !== undefined ? body.apn_info : existing.apn_info,
+        body.tag !== undefined ? body.tag : existing.tag,
+        body.notes !== undefined ? body.notes : existing.notes,
+        now,
+        esimId
+      )
+      .run();
+
+    if (changes.length > 0) {
+      const summaryText = `${currentUser.name} changed ${changes.join(', ')}`;
+      await logTimeline(db, {
+        customer_id: existing.customer_id,
+        staff_id: currentUser.id,
+        action_type: 'ESIM_UPDATED',
+        title: `eSIM Updated (${existing.package_name})`,
+        description: summaryText,
+        metadata: { esim_id: esimId, changes },
+      });
+
+      const clientIp = c.req.header('cf-connecting-ip') || '127.0.0.1';
+      await logAudit(db, {
+        staff_id: currentUser.id,
+        staff_name: currentUser.name,
+        action: 'UPDATE',
+        record_type: 'ESIM',
+        record_id: esimId,
+        previous_value: existing,
+        new_value: body,
+        change_summary: summaryText,
+        ip_address: clientIp,
+      });
     }
 
     return c.json({ success: true, message: 'eSIM updated successfully.' });
   } catch (err: any) {
-    return c.json({ success: false, error: err.message }, 500);
+    console.error('Update esim error:', err);
+    return c.json({ success: false, error: 'Failed to update eSIM.' }, 500);
   }
 });
 
 // Delete eSIM
 esimsApp.delete('/:id', async (c) => {
   try {
+    const db = c.env.DB;
+    const currentUser = c.get('user');
     const esimId = c.req.param('id');
-    memoryStore.esims = memoryStore.esims.filter((e) => e.id !== esimId);
+
+    const existing = await db
+      .prepare(`SELECT * FROM esims WHERE id = ? AND is_deleted = 0`)
+      .bind(esimId)
+      .first<Esim>();
+
+    if (!existing) {
+      return c.json({ success: false, error: 'eSIM not found.' }, 404);
+    }
+
+    const now = new Date().toISOString();
+    await db
+      .prepare(`UPDATE esims SET is_deleted = 1, status = 'Cancelled', updated_at = ? WHERE id = ?`)
+      .bind(now, esimId)
+      .run();
+
+    await logTimeline(db, {
+      customer_id: existing.customer_id,
+      staff_id: currentUser.id,
+      action_type: 'ESIM_CANCELLED',
+      title: `eSIM Cancelled / Removed: ${existing.package_name}`,
+      description: `${currentUser.name} removed eSIM with ICCID ${existing.iccid}.`,
+    });
+
+    const clientIp = c.req.header('cf-connecting-ip') || '127.0.0.1';
+    await logAudit(db, {
+      staff_id: currentUser.id,
+      staff_name: currentUser.name,
+      action: 'DELETE',
+      record_type: 'ESIM',
+      record_id: esimId,
+      previous_value: existing,
+      change_summary: `${currentUser.name} deleted eSIM ${existing.iccid}`,
+      ip_address: clientIp,
+    });
+
     return c.json({ success: true, message: 'eSIM deleted successfully.' });
   } catch (err: any) {
-    return c.json({ success: false, error: err.message }, 500);
+    return c.json({ success: false, error: 'Failed to delete eSIM.' }, 500);
   }
 });
 
