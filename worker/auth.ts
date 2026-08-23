@@ -1,6 +1,5 @@
 import { Context, Next } from 'hono';
 import { Env, StaffUser } from './types';
-import { memoryStore } from './embedded-db';
 
 export function createToken(userId = 'STF-001'): string {
   const array = new Uint8Array(24);
@@ -9,7 +8,7 @@ export function createToken(userId = 'STF-001'): string {
   return `tok_${userId}_${randomHex}`;
 }
 
-export async function getAuthenticatedUser(c: Context<{ Bindings: Env; Variables: { user: StaffUser } }>): Promise<StaffUser> {
+export async function getAuthenticatedUser(c: Context<{ Bindings: Env; Variables: { user: StaffUser } }>): Promise<StaffUser | null> {
   const authHeader = c.req.header('Authorization') || c.req.header('authorization');
   let token: string | null = null;
 
@@ -27,84 +26,67 @@ export async function getAuthenticatedUser(c: Context<{ Bindings: Env; Variables
     }
   }
 
-  if (!token) {
-    try {
-      const qToken = c.req.query('token');
-      if (qToken) token = qToken.trim();
-    } catch {}
-  }
+  if (!token) return null;
 
-  // 1. Try D1 Database if connected
-  if (c.env && c.env.DB) {
-    try {
-      if (token) {
-        const session = await c.env.DB
-          .prepare(
-            `SELECT u.id, u.name, u.email, u.role, u.phone, u.status, u.avatar_url, u.created_at, u.updated_at, u.last_login_at
-             FROM sessions s
-             JOIN users u ON s.user_id = u.id
-             WHERE s.token = ? AND u.status = 'active'`
-          )
-          .bind(token)
-          .first<StaffUser>();
+  try {
+    // 1. Look up session in D1
+    const session = await c.env.DB
+      .prepare(
+        `SELECT u.id, u.name, u.email, u.role, u.phone, u.status, u.avatar_url, u.created_at, u.updated_at, u.last_login_at
+         FROM sessions s
+         JOIN users u ON s.user_id = u.id
+         WHERE s.token = ? AND u.status = 'active'`
+      )
+      .bind(token)
+      .first<StaffUser>();
 
-        if (session) return session;
-
-        if (token.startsWith('tok_')) {
-          const parts = token.split('_');
-          if (parts.length >= 2) {
-            const uId = parts[1];
-            const user = await c.env.DB
-              .prepare(`SELECT id, name, email, role, phone, status, avatar_url, created_at, updated_at, last_login_at FROM users WHERE id = ? AND status = 'active'`)
-              .bind(uId)
-              .first<StaffUser>();
-            if (user) return user;
-          }
-        }
-      }
-
-      const defaultUser = await c.env.DB
-        .prepare(`SELECT id, name, email, role, phone, status, avatar_url, created_at, updated_at, last_login_at FROM users WHERE status = 'active' ORDER BY role = 'ADMIN' DESC, id ASC LIMIT 1`)
-        .first<StaffUser>();
-
-      if (defaultUser) return defaultUser;
-    } catch (e) {
-      console.warn('D1 auth query notice, using embedded store:', e);
-    }
-  }
-
-  // 2. Memory Store Fallback
-  if (token) {
-    const memSession = memoryStore.sessions.find((s) => s.token === token);
-    if (memSession) {
-      const user = memoryStore.users.find((u) => u.id === memSession.user_id && u.status === 'active');
-      if (user) return user;
+    if (session) {
+      return session;
     }
 
+    // 2. Token format tok_STF-XXX_...
     if (token.startsWith('tok_')) {
       const parts = token.split('_');
       if (parts.length >= 2) {
         const uId = parts[1];
-        const user = memoryStore.users.find((u) => u.id === uId && u.status === 'active');
-        if (user) return user;
+        const user = await c.env.DB
+          .prepare(`SELECT id, name, email, role, phone, status, avatar_url, created_at, updated_at, last_login_at FROM users WHERE id = ? AND status = 'active'`)
+          .bind(uId)
+          .first<StaffUser>();
+        if (user) {
+          const now = new Date();
+          const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+          try {
+            await c.env.DB
+              .prepare(`INSERT OR REPLACE INTO sessions (token, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)`)
+              .bind(token, user.id, expiresAt, now.toISOString())
+              .run();
+          } catch {}
+          return user;
+        }
       }
     }
-  }
 
-  return memoryStore.users[0];
+    return null;
+  } catch (err) {
+    console.error('getAuthenticatedUser error:', err);
+    return null;
+  }
 }
 
 export async function authMiddleware(c: Context<{ Bindings: Env; Variables: { user: StaffUser } }>, next: Next) {
   const user = await getAuthenticatedUser(c);
+  if (!user) {
+    return c.json({ success: false, error: 'Session expired or unauthorized. Please log in again.' }, 401);
+  }
   c.set('user', user);
   await next();
 }
 
 export async function adminOnlyMiddleware(c: Context<{ Bindings: Env; Variables: { user: StaffUser } }>, next: Next) {
-  const user = await getAuthenticatedUser(c);
+  const user = c.get('user');
   if (!user || user.role !== 'ADMIN') {
     return c.json({ success: false, error: 'Forbidden: Admin access required.' }, 403);
   }
-  c.set('user', user);
   await next();
 }

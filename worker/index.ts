@@ -1,8 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { Env, StaffUser } from './types';
-import { ensureDbInitialized } from './db';
-import { createFallbackD1 } from './fallback-db';
 import authApp from './routes/auth';
 import dashboardApp from './routes/dashboard';
 import customersApp from './routes/customers';
@@ -23,8 +21,6 @@ import packagesApp from './routes/packages';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: StaffUser } }>();
 
-const fallbackDb = createFallbackD1();
-
 // CORS & Middleware
 app.use('*', cors({
   origin: (origin) => origin || '*',
@@ -32,20 +28,6 @@ app.use('*', cors({
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true,
 }));
-
-// Fallback DB & Auto-Initialize Schema on API Requests
-app.use('/api/*', async (c, next) => {
-  if (!c.env.DB) {
-    (c.env as any).DB = fallbackDb;
-  } else {
-    try {
-      await ensureDbInitialized(c.env.DB);
-    } catch {
-      (c.env as any).DB = fallbackDb;
-    }
-  }
-  await next();
-});
 
 // Mount API sub-routers
 app.route('/api/auth', authApp);
