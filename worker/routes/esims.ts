@@ -236,6 +236,60 @@ esimsApp.post('/', async (c) => {
       return c.json({ success: false, error: 'Target customer does not exist.' }, 404);
     }
 
+    // Safe Foreign Key resolution for provider_id
+    let validProviderId: string | null = null;
+    if (body.provider_id && typeof body.provider_id === 'string' && body.provider_id.trim()) {
+      const p = await db
+        .prepare(`SELECT id FROM esim_providers WHERE id = ?`)
+        .bind(body.provider_id.trim())
+        .first<{ id: string }>();
+      if (p) {
+        validProviderId = p.id;
+      }
+    }
+    if (!validProviderId && body.provider && typeof body.provider === 'string' && body.provider.trim()) {
+      const p = await db
+        .prepare(`SELECT id FROM esim_providers WHERE name = ?`)
+        .bind(body.provider.trim())
+        .first<{ id: string }>();
+      if (p) {
+        validProviderId = p.id;
+      }
+    }
+
+    // Safe Foreign Key resolution for package_id
+    let validPackageId: string | null = null;
+    if (body.package_id && typeof body.package_id === 'string' && body.package_id.trim()) {
+      const pkg = await db
+        .prepare(`SELECT id FROM packages WHERE id = ?`)
+        .bind(body.package_id.trim())
+        .first<{ id: string }>();
+      if (pkg) {
+        validPackageId = pkg.id;
+      }
+    }
+    if (!validPackageId && body.package_name && typeof body.package_name === 'string' && body.package_name.trim()) {
+      const pkg = await db
+        .prepare(`SELECT id FROM packages WHERE package_name = ?`)
+        .bind(body.package_name.trim())
+        .first<{ id: string }>();
+      if (pkg) {
+        validPackageId = pkg.id;
+      }
+    }
+
+    // Safe Foreign Key resolution for staff_id
+    let validStaffId: string | null = null;
+    if (currentUser?.id) {
+      const u = await db
+        .prepare(`SELECT id FROM users WHERE id = ?`)
+        .bind(currentUser.id)
+        .first<{ id: string }>();
+      if (u) {
+        validStaffId = u.id;
+      }
+    }
+
     const now = new Date().toISOString();
     const esimId = await generateId(db, 'esims', 'ESIM', 2001);
 
@@ -254,9 +308,9 @@ esimsApp.post('/', async (c) => {
         body.iccid.trim(),
         body.country_region || 'Pakistan',
         body.provider || 'Callbite Partner',
-        body.provider_id || null,
+        validProviderId,
         body.package_name.trim(),
-        body.package_id || null,
+        validPackageId,
         body.data_allowance || '10GB',
         body.duration || '30 Days',
         body.start_date || now.slice(0, 10),
@@ -267,7 +321,7 @@ esimsApp.post('/', async (c) => {
         body.apn_info?.trim() || null,
         body.tag?.trim() || 'Primary SIM',
         body.notes?.trim() || null,
-        currentUser.id,
+        validStaffId,
         now,
         now
       )
@@ -275,7 +329,7 @@ esimsApp.post('/', async (c) => {
 
     await logTimeline(db, {
       customer_id: body.customer_id,
-      staff_id: currentUser.id,
+      staff_id: validStaffId,
       action_type: 'ESIM_ADDED',
       title: `eSIM Added: ${body.package_name}`,
       description: `${currentUser.name} added ${body.package_name} (${body.data_allowance}) - ICCID: ${body.iccid.trim()}${body.tag ? ' [' + body.tag + ']' : ''}. Expires ${body.expiry_date}.`,
@@ -284,7 +338,7 @@ esimsApp.post('/', async (c) => {
 
     const clientIp = c.req.header('cf-connecting-ip') || '127.0.0.1';
     await logAudit(db, {
-      staff_id: currentUser.id,
+      staff_id: validStaffId || currentUser.id,
       staff_name: currentUser.name,
       action: 'CREATE',
       record_type: 'ESIM',
@@ -322,7 +376,7 @@ esimsApp.post('/', async (c) => {
           cost,
           profit,
           body.payment_method || 'Easypaisa',
-          currentUser.id,
+          validStaffId,
           'Purchase recorded upon adding eSIM',
           now,
           now
@@ -331,7 +385,7 @@ esimsApp.post('/', async (c) => {
 
       await logTimeline(db, {
         customer_id: body.customer_id,
-        staff_id: currentUser.id,
+        staff_id: validStaffId,
         action_type: 'TRANSACTION_RECORDED',
         title: `Purchase Recorded (Rs. ${sell.toLocaleString()})`,
         description: `Payment recorded via ${body.payment_method || 'Easypaisa'} for ${body.package_name}.`,
@@ -397,6 +451,46 @@ esimsApp.put('/:id', async (c) => {
       changes.push(`Tag: ${existing.tag || 'None'} → ${body.tag}`);
     }
 
+    // Safe Foreign Key resolution for provider_id
+    let validProviderId = existing.provider_id;
+    if (body.provider_id !== undefined) {
+      if (body.provider_id && typeof body.provider_id === 'string' && body.provider_id.trim()) {
+        const p = await db
+          .prepare(`SELECT id FROM esim_providers WHERE id = ?`)
+          .bind(body.provider_id.trim())
+          .first<{ id: string }>();
+        validProviderId = p ? p.id : null;
+      } else {
+        validProviderId = null;
+      }
+    } else if (body.provider && body.provider !== existing.provider) {
+      const p = await db
+        .prepare(`SELECT id FROM esim_providers WHERE name = ?`)
+        .bind(body.provider.trim())
+        .first<{ id: string }>();
+      validProviderId = p ? p.id : null;
+    }
+
+    // Safe Foreign Key resolution for package_id
+    let validPackageId = existing.package_id;
+    if (body.package_id !== undefined) {
+      if (body.package_id && typeof body.package_id === 'string' && body.package_id.trim()) {
+        const pkg = await db
+          .prepare(`SELECT id FROM packages WHERE id = ?`)
+          .bind(body.package_id.trim())
+          .first<{ id: string }>();
+        validPackageId = pkg ? pkg.id : null;
+      } else {
+        validPackageId = null;
+      }
+    } else if (body.package_name && body.package_name !== existing.package_name) {
+      const pkg = await db
+        .prepare(`SELECT id FROM packages WHERE package_name = ?`)
+        .bind(body.package_name.trim())
+        .first<{ id: string }>();
+      validPackageId = pkg ? pkg.id : null;
+    }
+
     await db
       .prepare(
         `UPDATE esims SET
@@ -424,9 +518,9 @@ esimsApp.put('/:id', async (c) => {
         body.iccid !== undefined ? body.iccid.trim() : existing.iccid,
         body.country_region !== undefined ? body.country_region : existing.country_region,
         body.provider !== undefined ? body.provider : existing.provider,
-        body.provider_id !== undefined ? body.provider_id : existing.provider_id,
+        validProviderId,
         body.package_name !== undefined ? body.package_name.trim() : existing.package_name,
-        body.package_id !== undefined ? body.package_id : existing.package_id,
+        validPackageId,
         body.data_allowance !== undefined ? body.data_allowance : existing.data_allowance,
         body.duration !== undefined ? body.duration : existing.duration,
         body.start_date !== undefined ? body.start_date : existing.start_date,

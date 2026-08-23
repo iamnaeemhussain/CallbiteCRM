@@ -116,6 +116,23 @@ packagesApp.post('/', async (c) => {
     const costPrice = Number(body.cost_price || 0);
     const profit = sellPrice - costPrice;
 
+    // Safe foreign key resolution for provider_id
+    let validProviderId: string | null = null;
+    if (body.provider_id && typeof body.provider_id === 'string' && body.provider_id.trim()) {
+      const p = await db
+        .prepare(`SELECT id FROM esim_providers WHERE id = ?`)
+        .bind(body.provider_id.trim())
+        .first<{ id: string }>();
+      if (p) validProviderId = p.id;
+    }
+    if (!validProviderId && body.provider && typeof body.provider === 'string' && body.provider.trim()) {
+      const p = await db
+        .prepare(`SELECT id FROM esim_providers WHERE name = ?`)
+        .bind(body.provider.trim())
+        .first<{ id: string }>();
+      if (p) validProviderId = p.id;
+    }
+
     await db
       .prepare(
         `INSERT INTO packages (
@@ -130,8 +147,8 @@ packagesApp.post('/', async (c) => {
         body.package_name.trim(),
         body.data_allowance?.trim() || '10GB',
         body.duration?.trim() || '30 Days',
-        body.provider?.trim() || 'Partner',
-        body.provider_id || null,
+        body.provider?.trim() || 'Callbite Partner',
+        validProviderId,
         sellPrice,
         costPrice,
         profit,
@@ -188,6 +205,26 @@ packagesApp.put('/:id', async (c) => {
     const costPrice = body.cost_price !== undefined ? Number(body.cost_price) : existing.cost_price;
     const profit = sellPrice - costPrice;
 
+    // Safe foreign key resolution for provider_id
+    let validProviderId = existing.provider_id;
+    if (body.provider_id !== undefined) {
+      if (body.provider_id && typeof body.provider_id === 'string' && body.provider_id.trim()) {
+        const p = await db
+          .prepare(`SELECT id FROM esim_providers WHERE id = ?`)
+          .bind(body.provider_id.trim())
+          .first<{ id: string }>();
+        validProviderId = p ? p.id : null;
+      } else {
+        validProviderId = null;
+      }
+    } else if (body.provider && body.provider !== existing.provider) {
+      const p = await db
+        .prepare(`SELECT id FROM esim_providers WHERE name = ?`)
+        .bind(body.provider.trim())
+        .first<{ id: string }>();
+      validProviderId = p ? p.id : null;
+    }
+
     await db
       .prepare(
         `UPDATE packages SET
@@ -212,7 +249,7 @@ packagesApp.put('/:id', async (c) => {
         body.data_allowance !== undefined ? body.data_allowance : existing.data_allowance,
         body.duration !== undefined ? body.duration : existing.duration,
         body.provider !== undefined ? body.provider : existing.provider,
-        body.provider_id !== undefined ? body.provider_id : existing.provider_id,
+        validProviderId,
         sellPrice,
         costPrice,
         profit,

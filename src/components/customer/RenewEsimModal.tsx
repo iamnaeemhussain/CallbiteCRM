@@ -23,9 +23,10 @@ export const RenewEsimModal: React.FC<RenewEsimModalProps> = ({
   customerName,
   onSuccess,
 }) => {
-  const { packages, presets, currencySymbol, formatPrice } = useSettings();
+  const { packages: contextPackages, presets, currencySymbol, formatPrice } = useSettings();
   const toast = useToast();
 
+  const [catalogPackages, setCatalogPackages] = useState<EsimPackage[]>([]);
   const [selectedPackageId, setSelectedPackageId] = useState('');
   const [packageName, setPackageName] = useState('');
   const [dataAllowance, setDataAllowance] = useState('10GB');
@@ -38,6 +39,18 @@ export const RenewEsimModal: React.FC<RenewEsimModalProps> = ({
   const [referenceId, setReferenceId] = useState('');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      api.get('/api/packages').then((res) => {
+        if (res && res.success && res.packages) {
+          setCatalogPackages(res.packages);
+        }
+      }).catch(() => {});
+    }
+  }, [isOpen]);
+
+  const packagesList = catalogPackages.length > 0 ? catalogPackages : contextPackages;
 
   useEffect(() => {
     if (esim && isOpen) {
@@ -58,7 +71,7 @@ export const RenewEsimModal: React.FC<RenewEsimModalProps> = ({
       setNewExpiryDate(nextExpiry.toISOString().slice(0, 10));
 
       // Match preset/package if possible
-      const matched = packages.find((p) => p.package_name === esim.package_name || p.country_region === esim.country_region);
+      const matched = packagesList.find((p) => p.package_name === esim.package_name || p.country_region === esim.country_region);
       if (matched) {
         setSelectedPackageId(String(matched.id));
         setSellingPrice(matched.selling_price.toString());
@@ -73,20 +86,20 @@ export const RenewEsimModal: React.FC<RenewEsimModalProps> = ({
       setReferenceId('');
       setNotes(`Monthly renewal for ${esim.package_name}`);
     }
-  }, [esim, isOpen, packages]);
+  }, [esim, isOpen, packagesList.length]);
 
   const handlePackageSelect = (pkgIdStr: string) => {
     setSelectedPackageId(pkgIdStr);
-    const pkg = packages.find((p) => String(p.id) === pkgIdStr) || presets.find((p) => String(p.id) === pkgIdStr);
+    const pkg = packagesList.find((p) => String(p.id) === pkgIdStr);
     if (pkg) {
       setPackageName(pkg.package_name);
       setDataAllowance(pkg.data_allowance);
       setDuration(pkg.duration);
-      setSellingPrice((pkg as any).selling_price ? (pkg as any).selling_price.toString() : (pkg as any).default_selling_price?.toString() || '4500');
-      setCostPrice((pkg as any).cost_price ? (pkg as any).cost_price.toString() : (pkg as any).default_cost_price?.toString() || '2800');
+      setSellingPrice(pkg.selling_price !== undefined ? pkg.selling_price.toString() : '4500');
+      setCostPrice(pkg.cost_price !== undefined ? pkg.cost_price.toString() : '2800');
 
       // Recalculate expiry
-      const daysMatch = pkg.duration.match(/(\d+)\s*Days?/i);
+      const daysMatch = (pkg.duration || '30 Days').match(/(\d+)\s*Days?/i);
       const days = daysMatch ? parseInt(daysMatch[1], 10) : 30;
 
       const base = esim && new Date(esim.expiry_date) > new Date() ? new Date(esim.expiry_date) : new Date();
@@ -207,9 +220,9 @@ export const RenewEsimModal: React.FC<RenewEsimModalProps> = ({
             className="text-xs font-bold rounded-xl border border-emerald-300 bg-white px-3 py-2 text-slate-900 focus:border-emerald-500 focus:ring-emerald-500 w-full sm:w-auto"
           >
             <option value="">-- Choose Package Bundle (Auto-Fills Price) --</option>
-            {packages.map((p) => (
+            {packagesList.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.country_region}: {p.package_name} ({p.data_allowance} / {p.duration}) — Rs. {p.selling_price.toLocaleString()}
+                {p.package_name} — {p.country_region} ({p.data_allowance} / {p.duration}) — Rs. {Number(p.selling_price).toLocaleString()}
               </option>
             ))}
           </select>

@@ -188,6 +188,25 @@ tasksApp.post('/', async (c) => {
     const now = new Date().toISOString();
     const taskId = await generateId(db, 'tasks', 'TSK', 6001);
 
+    let validEsimId: string | null = null;
+    if (body.esim_id && typeof body.esim_id === 'string' && body.esim_id.trim()) {
+      const e = await db.prepare(`SELECT id FROM esims WHERE id = ? AND is_deleted = 0`).bind(body.esim_id.trim()).first<{ id: string }>();
+      if (e) validEsimId = e.id;
+    }
+
+    let validAssignedStaffId: string | null = null;
+    const targetStaffId = body.assigned_staff_id || currentUser?.id;
+    if (targetStaffId && typeof targetStaffId === 'string' && targetStaffId.trim()) {
+      const u = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(targetStaffId.trim()).first<{ id: string }>();
+      if (u) validAssignedStaffId = u.id;
+    }
+
+    let validCreatedByStaffId: string | null = null;
+    if (currentUser?.id) {
+      const u = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(currentUser.id).first<{ id: string }>();
+      if (u) validCreatedByStaffId = u.id;
+    }
+
     await db
       .prepare(
         `INSERT INTO tasks (
@@ -199,14 +218,14 @@ tasksApp.post('/', async (c) => {
       .bind(
         taskId,
         body.customer_id,
-        body.esim_id || null,
+        validEsimId,
         body.task_type || 'Customer Follow-up',
         body.due_date,
         body.due_time?.trim() || null,
-        body.assigned_staff_id || currentUser.id,
+        validAssignedStaffId,
         body.priority || 'Normal',
         body.notes.trim(),
-        currentUser.id,
+        validCreatedByStaffId,
         now,
         now
       )

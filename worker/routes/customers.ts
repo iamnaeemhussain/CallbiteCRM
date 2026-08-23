@@ -265,6 +265,27 @@ customersApp.post('/', async (c) => {
     const now = new Date().toISOString();
     const customerId = await generateId(db, 'customers', 'CUST', 1001);
 
+    // Safe foreign key resolution for referred_by_customer_id
+    let validReferredById: string | null = null;
+    if (body.referred_by_customer_id && typeof body.referred_by_customer_id === 'string' && body.referred_by_customer_id.trim()) {
+      const ref = await db
+        .prepare(`SELECT id FROM customers WHERE id = ? AND is_deleted = 0`)
+        .bind(body.referred_by_customer_id.trim())
+        .first<{ id: string }>();
+      if (ref) validReferredById = ref.id;
+    }
+
+    // Safe foreign key resolution for assigned_staff_id
+    let validAssignedStaffId: string | null = null;
+    const targetStaffId = body.assigned_staff_id || currentUser?.id;
+    if (targetStaffId && typeof targetStaffId === 'string' && targetStaffId.trim()) {
+      const stf = await db
+        .prepare(`SELECT id FROM users WHERE id = ?`)
+        .bind(targetStaffId.trim())
+        .first<{ id: string }>();
+      if (stf) validAssignedStaffId = stf.id;
+    }
+
     await db
       .prepare(
         `INSERT INTO customers (
@@ -282,9 +303,9 @@ customersApp.post('/', async (c) => {
         body.country?.trim() || null,
         body.city?.trim() || null,
         body.source || 'WhatsApp',
-        body.referred_by_customer_id || null,
+        validReferredById,
         body.status || 'Active',
-        body.assigned_staff_id || currentUser.id,
+        validAssignedStaffId,
         body.internal_notes?.trim() || null,
         now,
         now,
@@ -306,7 +327,7 @@ customersApp.post('/', async (c) => {
 
     await logTimeline(db, {
       customer_id: customerId,
-      staff_id: currentUser.id,
+      staff_id: validAssignedStaffId,
       action_type: 'CUSTOMER_CREATED',
       title: 'Customer Account Created',
       description: `Staff member ${currentUser.name} registered ${body.full_name.trim()} (Source: ${body.source || 'WhatsApp'}).`,
@@ -315,7 +336,7 @@ customersApp.post('/', async (c) => {
 
     const clientIp = c.req.header('cf-connecting-ip') || '127.0.0.1';
     await logAudit(db, {
-      staff_id: currentUser.id,
+      staff_id: validAssignedStaffId || currentUser.id,
       staff_name: currentUser.name,
       action: 'CREATE',
       record_type: 'CUSTOMER',
@@ -329,6 +350,32 @@ customersApp.post('/', async (c) => {
     if (body.initial_esim && body.initial_esim.iccid) {
       const esimId = await generateId(db, 'esims', 'ESIM', 2001);
       const esim = body.initial_esim;
+
+      let validEsimProviderId: string | null = null;
+      if (esim.provider_id && typeof esim.provider_id === 'string' && esim.provider_id.trim()) {
+        const p = await db.prepare(`SELECT id FROM esim_providers WHERE id = ?`).bind(esim.provider_id.trim()).first<{ id: string }>();
+        if (p) validEsimProviderId = p.id;
+      }
+      if (!validEsimProviderId && esim.provider && typeof esim.provider === 'string' && esim.provider.trim()) {
+        const p = await db.prepare(`SELECT id FROM esim_providers WHERE name = ?`).bind(esim.provider.trim()).first<{ id: string }>();
+        if (p) validEsimProviderId = p.id;
+      }
+
+      let validEsimPackageId: string | null = null;
+      if (esim.package_id && typeof esim.package_id === 'string' && esim.package_id.trim()) {
+        const pkg = await db.prepare(`SELECT id FROM packages WHERE id = ?`).bind(esim.package_id.trim()).first<{ id: string }>();
+        if (pkg) validEsimPackageId = pkg.id;
+      }
+      if (!validEsimPackageId && esim.package_name && typeof esim.package_name === 'string' && esim.package_name.trim()) {
+        const pkg = await db.prepare(`SELECT id FROM packages WHERE package_name = ?`).bind(esim.package_name.trim()).first<{ id: string }>();
+        if (pkg) validEsimPackageId = pkg.id;
+      }
+
+      let validStaffId: string | null = null;
+      if (currentUser?.id) {
+        const u = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(currentUser.id).first<{ id: string }>();
+        if (u) validStaffId = u.id;
+      }
       
       await db
         .prepare(
@@ -344,10 +391,10 @@ customersApp.post('/', async (c) => {
           customerId,
           esim.iccid.trim(),
           esim.country_region || 'Pakistan',
-          esim.provider || 'Partner',
-          esim.provider_id || null,
+          esim.provider || 'Callbite Partner',
+          validEsimProviderId,
           esim.package_name || 'Standard eSIM',
-          esim.package_id || null,
+          validEsimPackageId,
           esim.data_allowance || '10GB',
           esim.duration || '30 Days',
           now.slice(0, 10),
@@ -356,7 +403,7 @@ customersApp.post('/', async (c) => {
           esim.apn_info || null,
           esim.tag || 'Primary SIM',
           esim.notes || null,
-          currentUser.id,
+          validStaffId,
           now,
           now
         )
@@ -364,7 +411,7 @@ customersApp.post('/', async (c) => {
 
       await logTimeline(db, {
         customer_id: customerId,
-        staff_id: currentUser.id,
+        staff_id: validStaffId,
         action_type: 'ESIM_ADDED',
         title: `eSIM Added: ${esim.package_name}`,
         description: `Added ${esim.package_name} (${esim.data_allowance}) with ICCID ${esim.iccid}.`,
@@ -398,7 +445,7 @@ customersApp.post('/', async (c) => {
             cost,
             profit,
             esim.payment_method || 'Easypaisa',
-            currentUser.id,
+            validStaffId,
             'Initial purchase recorded upon customer creation',
             now,
             now
@@ -407,7 +454,7 @@ customersApp.post('/', async (c) => {
 
         await logTimeline(db, {
           customer_id: customerId,
-          staff_id: currentUser.id,
+          staff_id: validStaffId,
           action_type: 'TRANSACTION_RECORDED',
           title: `Purchase Recorded (Rs. ${sell.toLocaleString()})`,
           description: `Initial eSIM purchase recorded via ${esim.payment_method || 'Easypaisa'}.`,

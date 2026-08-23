@@ -87,6 +87,13 @@ interactionsApp.post('/', async (c) => {
     const interactionId = await generateId(db, 'interactions', 'INT', 5001);
     const interactionDate = body.interaction_date || now;
 
+    let validStaffId: string = currentUser.id;
+    const u = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(currentUser.id).first<{ id: string }>();
+    if (!u) {
+      const firstUser = await db.prepare(`SELECT id FROM users LIMIT 1`).first<{ id: string }>();
+      if (firstUser) validStaffId = firstUser.id;
+    }
+
     await db
       .prepare(
         `INSERT INTO interactions (
@@ -97,7 +104,7 @@ interactionsApp.post('/', async (c) => {
       .bind(
         interactionId,
         body.customer_id,
-        currentUser.id,
+        validStaffId,
         body.contact_type || 'WhatsApp',
         body.purpose?.trim() || null,
         body.notes.trim(),

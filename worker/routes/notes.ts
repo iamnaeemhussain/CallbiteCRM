@@ -53,6 +53,13 @@ notesApp.post('/', async (c) => {
     const now = new Date().toISOString();
     const isPinned = body.is_pinned ? 1 : 0;
 
+    let validStaffId: string = currentUser.id;
+    const u = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(currentUser.id).first<{ id: string }>();
+    if (!u) {
+      const firstUser = await db.prepare(`SELECT id FROM users LIMIT 1`).first<{ id: string }>();
+      if (firstUser) validStaffId = firstUser.id;
+    }
+
     const res = await db
       .prepare(
         `INSERT INTO notes (customer_id, staff_id, title, content, is_pinned, created_at, updated_at)
@@ -60,7 +67,7 @@ notesApp.post('/', async (c) => {
       )
       .bind(
         body.customer_id,
-        currentUser.id,
+        validStaffId,
         body.title?.trim() || null,
         body.content.trim(),
         isPinned,

@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Modal } from '../common/Modal';
 import { Button } from '../common/Button';
-import { Esim, EsimStatus } from '../../types';
+import { Esim, EsimStatus, EsimPackage, EsimProvider } from '../../types';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useToast } from '../../contexts/ToastContext';
 import { api } from '../../utils/api';
-import { QrCode, Sparkles, Radio, Package, Upload, Link, Image as ImageIcon, Check, RefreshCw, Tag } from 'lucide-react';
+import { QrCode, Sparkles, Radio, Package, Upload, Link, Image as ImageIcon, Check, RefreshCw, Tag, Loader2 } from 'lucide-react';
 
 interface EsimFormModalProps {
   isOpen: boolean;
@@ -35,18 +35,23 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
   esim,
   onSuccess,
 }) => {
-  const { packages, presets, providers, currencySymbol } = useSettings();
+  const { packages: contextPackages, providers: contextProviders, currencySymbol, refreshSettings } = useSettings();
   const toast = useToast();
 
   const isEdit = Boolean(esim);
+
+  // Live packages and providers fetched directly from database
+  const [catalogPackages, setCatalogPackages] = useState<EsimPackage[]>([]);
+  const [catalogProviders, setCatalogProviders] = useState<EsimProvider[]>([]);
+  const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
 
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [selectedPackageId, setSelectedPackageId] = useState('');
   const [iccid, setIccid] = useState('');
   const [countryRegion, setCountryRegion] = useState('Pakistan');
-  const [provider, setProvider] = useState('Jazz / Zong Pakistan Hub');
-  const [providerId, setProviderId] = useState('PRV-106');
-  const [packageName, setPackageName] = useState('Pakistan 10GB Standard');
+  const [provider, setProvider] = useState('Callbite Partner');
+  const [providerId, setProviderId] = useState('');
+  const [packageName, setPackageName] = useState('');
   const [packageId, setPackageId] = useState('');
   const [dataAllowance, setDataAllowance] = useState('10GB');
   const [duration, setDuration] = useState('30 Days');
@@ -71,27 +76,48 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Fetch latest packages and providers from backend when modal opens
   useEffect(() => {
-    if (isOpen && !customerId) {
-      api.get('/api/customers', { limit: 100 }).then((res) => {
-        if (res && res.success && res.customers) {
-          setAllCustomers(res.customers);
-        }
-      }).catch(() => {});
+    if (isOpen) {
+      setIsLoadingCatalog(true);
+      Promise.all([
+        api.get('/api/packages').catch(() => ({ success: false, packages: [] })),
+        api.get('/api/providers').catch(() => ({ success: false, providers: [] })),
+        !customerId ? api.get('/api/customers', { limit: 100 }).catch(() => ({ success: false, customers: [] })) : Promise.resolve({ success: false, customers: [] }),
+      ])
+        .then(([pkgRes, prvRes, custRes]) => {
+          if (pkgRes && pkgRes.success && pkgRes.packages) {
+            setCatalogPackages(pkgRes.packages);
+          }
+          if (prvRes && prvRes.success && prvRes.providers) {
+            setCatalogProviders(prvRes.providers);
+          }
+          if (custRes && custRes.success && custRes.customers) {
+            setAllCustomers(custRes.customers);
+          }
+        })
+        .finally(() => {
+          setIsLoadingCatalog(false);
+        });
     }
   }, [isOpen, customerId]);
+
+  // Combined packages list: prioritize freshly fetched catalog packages
+  const packagesList = catalogPackages.length > 0 ? catalogPackages : contextPackages;
+  const providersList = catalogProviders.length > 0 ? catalogProviders : contextProviders;
 
   useEffect(() => {
     if (esim) {
       setSelectedCustomerId(esim.customer_id);
       setIccid(esim.iccid || '');
-      setCountryRegion(esim.country_region || '');
-      setProvider(esim.provider || '');
+      setCountryRegion(esim.country_region || 'Pakistan');
+      setProvider(esim.provider || 'Callbite Partner');
       setProviderId(esim.provider_id || '');
       setPackageName(esim.package_name || '');
       setPackageId(esim.package_id || '');
-      setDataAllowance(esim.data_allowance || '');
-      setDuration(esim.duration || '');
+      setSelectedPackageId(esim.package_id || '');
+      setDataAllowance(esim.data_allowance || '10GB');
+      setDuration(esim.duration || '30 Days');
       setStartDate(esim.start_date || '');
       setExpiryDate(esim.expiry_date || '');
       setStatus(esim.status || 'Active');
@@ -108,7 +134,7 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
         setQrInputMode('lpa');
       }
 
-      setApnInfo(esim.apn_info || '');
+      setApnInfo(esim.apn_info || 'APN: internet');
       setNotes(esim.notes || '');
       setRecordTransaction(false);
     } else {
@@ -117,10 +143,11 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
       const generatedIccid = `890141032111185${Math.floor(1000 + Math.random() * 9000)}F`;
       setIccid(generatedIccid);
       setCountryRegion('Pakistan');
-      setProvider('Jazz / Zong Pakistan Hub');
-      setProviderId('');
+      setProvider(providersList.length > 0 ? providersList[0].name : 'Callbite Partner');
+      setProviderId(providersList.length > 0 ? providersList[0].id : '');
       setPackageName('');
       setPackageId('');
+      setSelectedPackageId('');
       setDataAllowance('10GB');
       setDuration('30 Days');
 
@@ -144,34 +171,39 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
       setCostPrice('2800');
       setPaymentMethod('Easypaisa');
     }
-  }, [esim, customerId, isOpen]);
+  }, [esim, customerId, isOpen, providersList.length]);
 
-  // When a Package from the dropdown is selected -> AUTO FILL all fields!
-  const handlePackageDropdownChange = (pkgIdOrName: string) => {
-    setSelectedPackageId(pkgIdOrName);
-    const foundPkg = packages.find((p) => String(p.id) === pkgIdOrName || p.package_name === pkgIdOrName) ||
-      presets.find((p) => String(p.id) === pkgIdOrName || p.package_name === pkgIdOrName);
+  // When a Package is selected from the catalog dropdown -> AUTO FILL ALL FIELDS!
+  const handlePackageDropdownChange = (pkgId: string) => {
+    setSelectedPackageId(pkgId);
+    if (!pkgId) {
+      return;
+    }
+
+    const foundPkg = packagesList.find((p) => String(p.id) === pkgId || p.package_name === pkgId);
 
     if (foundPkg) {
       setPackageName(foundPkg.package_name);
-      setPackageId(String(foundPkg.id));
+      setPackageId(foundPkg.id);
       setCountryRegion(foundPkg.country_region);
       setDataAllowance(foundPkg.data_allowance); // AUTO-FILL DATA ALLOWANCE
       setDuration(foundPkg.duration);           // AUTO-FILL DURATION
-      setProvider(foundPkg.provider);
+      setProvider(foundPkg.provider || 'Callbite Partner');
       setProviderId(foundPkg.provider_id || '');
 
-      const sell = (foundPkg as any).selling_price ?? (foundPkg as any).default_selling_price ?? 4500;
-      const cost = (foundPkg as any).cost_price ?? (foundPkg as any).default_cost_price ?? 2800;
+      const sell = foundPkg.selling_price !== undefined ? foundPkg.selling_price : 4500;
+      const cost = foundPkg.cost_price !== undefined ? foundPkg.cost_price : 2800;
       setSellingPrice(sell.toString());
       setCostPrice(cost.toString());
 
-      if ((foundPkg as any).features) {
-        setApnInfo(`APN: internet • ${(foundPkg as any).features}`);
+      if (foundPkg.features) {
+        setApnInfo(`APN: internet • ${foundPkg.features}`);
+      } else {
+        setApnInfo('APN: internet');
       }
 
       // Auto-compute expiry date based on package duration
-      const daysMatch = foundPkg.duration.match(/(\d+)\s*Days?/i);
+      const daysMatch = (foundPkg.duration || '30 Days').match(/(\d+)\s*Days?/i);
       const days = daysMatch ? parseInt(daysMatch[1], 10) : 30;
       const baseDate = startDate ? new Date(startDate) : new Date();
       const d = new Date(baseDate);
@@ -179,19 +211,17 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
       setExpiryDate(d.toISOString().slice(0, 10));
 
       if (iccid && qrInputMode === 'lpa') {
-        setQrCodeData(`LPA:1$smdp.io$CALLBITE-${foundPkg.country_region.slice(0, 2).toUpperCase()}-${foundPkg.data_allowance}-${iccid}`);
+        const countryCode = foundPkg.country_region.slice(0, 2).toUpperCase();
+        const cleanAllowance = foundPkg.data_allowance.replace(/\s+/g, '');
+        setQrCodeData(`LPA:1$smdp.io$CALLBITE-${countryCode}-${cleanAllowance}-${iccid}`);
       }
-    } else {
-      setPackageName(pkgIdOrName);
     }
   };
 
   const handleProviderSelect = (selectedName: string) => {
     setProvider(selectedName);
-    const found = providers.find((p) => p.name === selectedName);
-    if (found) {
-      setProviderId(found.id);
-    }
+    const found = providersList.find((p) => p.name === selectedName);
+    setProviderId(found ? found.id : '');
   };
 
   const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -378,37 +408,42 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
             />
           </div>
 
-          {/* PACKAGE NAME DROPDOWN (AUTO-FILLS DATA ALLOWANCE, DURATION & DETAILS) */}
+          {/* PACKAGE NAME DROPDOWN (FETCHED DIRECTLY FROM eSIM Packages & Bundles) */}
           <div className="sm:col-span-2 p-3.5 bg-emerald-50/40 rounded-2xl border border-emerald-200">
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-bold uppercase tracking-wider text-emerald-950 flex items-center gap-1.5">
                 <Package className="w-4 h-4 text-emerald-600" />
                 Package Name * (Select Bundle to Auto-Fill Allowance & Duration)
               </label>
+              {isLoadingCatalog && <Loader2 className="w-3.5 h-3.5 text-emerald-600 animate-spin" />}
             </div>
 
             <select
-              value={selectedPackageId || packageName}
+              value={selectedPackageId}
               onChange={(e) => handlePackageDropdownChange(e.target.value)}
               className="w-full text-xs font-bold rounded-xl border border-emerald-300 bg-white px-3.5 py-2.5 text-slate-900 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500 shadow-sm"
             >
-              <option value="">-- Choose Package Bundle from Catalog --</option>
-              {packages.map((p) => (
+              <option value="">
+                {packagesList.length === 0
+                  ? '-- No packages in catalog (Type custom package below or add in Packages) --'
+                  : '-- Choose Package Bundle from Catalog --'}
+              </option>
+              {packagesList.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.package_name} — {p.country_region} ({p.data_allowance} / {p.duration}) — Rs. {p.selling_price.toLocaleString()}
+                  {p.package_name} — {p.country_region} ({p.data_allowance} / {p.duration}) — Rs. {Number(p.selling_price).toLocaleString()}
                 </option>
               ))}
             </select>
 
             <div className="mt-2 flex items-center gap-2">
-              <span className="text-[11px] text-slate-500">Selected Name:</span>
+              <span className="text-[11px] font-semibold text-slate-500 shrink-0">Package Name:</span>
               <input
                 type="text"
                 required
                 value={packageName}
                 onChange={(e) => setPackageName(e.target.value)}
-                placeholder="e.g. Pakistan 10GB Standard"
-                className="flex-1 text-xs font-semibold rounded-lg border border-slate-300 px-2.5 py-1 text-slate-900 bg-white"
+                placeholder="e.g. Pakistan 20GB Standard"
+                className="flex-1 text-xs font-bold rounded-lg border border-slate-300 px-2.5 py-1.5 text-slate-900 bg-white"
               />
             </div>
           </div>
@@ -450,7 +485,8 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
               onChange={(e) => handleProviderSelect(e.target.value)}
               className="w-full text-sm rounded-xl border border-slate-300 px-3.5 py-2 text-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white font-medium"
             >
-              {providers.map((p) => (
+              <option value="Callbite Partner">Callbite Partner</option>
+              {providersList.map((p) => (
                 <option key={p.id} value={p.name}>
                   {p.name} ({p.country_coverage})
                 </option>

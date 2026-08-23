@@ -21,12 +21,13 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
   customer,
   onSuccess,
 }) => {
-  const { tags: availableTags, staffList, presets, packages, providers, currencySymbol, formatPrice } = useSettings();
+  const { tags: availableTags, staffList, presets, packages: contextPackages, providers, currencySymbol, formatPrice } = useSettings();
   const { user } = useAuth();
   const toast = useToast();
 
   const isEdit = Boolean(customer);
 
+  const [catalogPackages, setCatalogPackages] = useState<any[]>([]);
   const [fullName, setFullName] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
   const [phone, setPhone] = useState('');
@@ -58,7 +59,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
   const [esimCost, setEsimCost] = useState('2800');
   const [esimPaymentMethod, setEsimPaymentMethod] = useState('Easypaisa');
 
-  // Load customer list for referral select
+  // Load customer list & package list for initial esim
   useEffect(() => {
     if (isOpen) {
       api.get('/api/customers', { limit: 100 }).then((res) => {
@@ -72,8 +73,16 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
           );
         }
       }).catch(() => {});
+
+      api.get('/api/packages').then((res) => {
+        if (res.success && res.packages) {
+          setCatalogPackages(res.packages);
+        }
+      }).catch(() => {});
     }
   }, [isOpen]);
+
+  const packagesList = catalogPackages.length > 0 ? catalogPackages : contextPackages;
 
   useEffect(() => {
     if (customer) {
@@ -118,12 +127,12 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
     setSelectedPresetId(presetIdStr);
     const cleanId = presetIdStr.replace(/^pkg_/, '').replace(/^preset_/, '');
     const found =
-      packages.find((p) => String(p.id) === cleanId || String(p.id) === presetIdStr) ||
+      packagesList.find((p) => String(p.id) === cleanId || String(p.id) === presetIdStr) ||
       presets.find((p) => String(p.id) === cleanId || String(p.id) === presetIdStr);
 
     if (found) {
       setEsimCountry(found.country_region);
-      setEsimProvider(found.provider);
+      setEsimProvider(found.provider || 'Callbite Partner');
       setEsimPackage(found.package_name);
       setEsimData(found.data_allowance);
       setEsimDuration(found.duration);
@@ -133,7 +142,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
       setEsimCost(cost.toString());
 
       // Parse duration to calculate expiry
-      const daysMatch = found.duration.match(/(\d+)\s*Days?/i);
+      const daysMatch = (found.duration || '30 Days').match(/(\d+)\s*Days?/i);
       const days = daysMatch ? parseInt(daysMatch[1], 10) : 30;
       const d = new Date();
       d.setDate(d.getDate() + days);
@@ -473,15 +482,15 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
                     className="text-xs rounded-lg border border-emerald-300 bg-white px-2 py-1 text-slate-800"
                   >
                     <option value="">-- Or choose a package preset --</option>
-                    {packages && packages.length > 0
-                      ? packages.map((p) => (
+                    {packagesList && packagesList.length > 0
+                      ? packagesList.map((p) => (
                           <option key={`pkg_${p.id}`} value={`pkg_${p.id}`}>
-                            {p.country_region}: {p.package_name} ({p.data_allowance}) - {currencySymbol} {p.selling_price.toLocaleString()}
+                            {p.country_region}: {p.package_name} ({p.data_allowance}) - {currencySymbol} {Number(p.selling_price || p.default_selling_price || 0).toLocaleString()}
                           </option>
                         ))
                       : presets.map((p) => (
                           <option key={`preset_${p.id}`} value={`preset_${p.id}`}>
-                            {p.country_region}: {p.package_name} ({p.data_allowance}) - {currencySymbol} {p.default_selling_price.toLocaleString()}
+                            {p.country_region}: {p.package_name} ({p.data_allowance}) - {currencySymbol} {Number(p.default_selling_price || 0).toLocaleString()}
                           </option>
                         ))}
                   </select>

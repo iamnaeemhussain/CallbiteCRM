@@ -230,6 +230,12 @@ renewalsApp.post('/', async (c) => {
 
     // 2. Automatically Record Transaction in PKR
     const txnId = await generateId(db, 'transactions', 'TXN', 3001);
+    let validStaffId: string | null = null;
+    if (currentUser?.id) {
+      const u = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(currentUser.id).first<{ id: string }>();
+      if (u) validStaffId = u.id;
+    }
+
     await db
       .prepare(
         `INSERT INTO transactions (
@@ -252,7 +258,7 @@ renewalsApp.post('/', async (c) => {
         profit,
         body.payment_method || 'Easypaisa',
         body.payment_status || 'Paid',
-        currentUser.id,
+        validStaffId,
         body.reference_id?.trim() || null,
         body.notes?.trim() || 'Manual renewal processed by staff',
         now,

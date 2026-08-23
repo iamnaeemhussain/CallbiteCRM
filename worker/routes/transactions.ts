@@ -246,6 +246,20 @@ transactionsApp.post('/', async (c) => {
     const costPrice = Number(body.cost_price || 0);
     const profit = sellPrice - costPrice;
 
+    // Safe foreign key resolution for esim_id
+    let validEsimId: string | null = null;
+    if (body.esim_id && typeof body.esim_id === 'string' && body.esim_id.trim()) {
+      const e = await db.prepare(`SELECT id FROM esims WHERE id = ? AND is_deleted = 0`).bind(body.esim_id.trim()).first<{ id: string }>();
+      if (e) validEsimId = e.id;
+    }
+
+    // Safe foreign key resolution for staff_id
+    let validStaffId: string | null = null;
+    if (currentUser?.id) {
+      const u = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(currentUser.id).first<{ id: string }>();
+      if (u) validStaffId = u.id;
+    }
+
     await db
       .prepare(
         `INSERT INTO transactions (
@@ -258,7 +272,7 @@ transactionsApp.post('/', async (c) => {
       .bind(
         txnId,
         body.customer_id,
-        body.esim_id || null,
+        validEsimId,
         body.transaction_type || 'New eSIM',
         body.package_name?.trim() || null,
         body.data_allowance?.trim() || null,
@@ -269,7 +283,7 @@ transactionsApp.post('/', async (c) => {
         profit,
         body.payment_method || 'Easypaisa',
         body.payment_status || 'Paid',
-        currentUser.id,
+        validStaffId,
         body.reference_id?.trim() || null,
         body.notes?.trim() || null,
         now,

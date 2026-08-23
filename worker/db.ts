@@ -299,6 +299,12 @@ export async function logTimeline(
 ) {
   try {
     const now = new Date().toISOString();
+    let validStaffId: string | null = null;
+    if (params.staff_id) {
+      const u = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(params.staff_id).first<{ id: string }>();
+      if (u) validStaffId = params.staff_id;
+    }
+
     await db
       .prepare(
         `INSERT INTO activity_timeline (customer_id, staff_id, action_type, title, description, metadata_json, created_at)
@@ -306,7 +312,7 @@ export async function logTimeline(
       )
       .bind(
         params.customer_id,
-        params.staff_id || null,
+        validStaffId,
         params.action_type,
         params.title,
         params.description,
@@ -327,7 +333,7 @@ export async function logTimeline(
 export async function logAudit(
   db: D1Database,
   params: {
-    staff_id: string;
+    staff_id?: string | null;
     staff_name: string;
     action: string;
     record_type: string;
@@ -340,13 +346,19 @@ export async function logAudit(
 ) {
   try {
     const now = new Date().toISOString();
+    let validStaffId: string | null = null;
+    if (params.staff_id) {
+      const u = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(params.staff_id).first<{ id: string }>();
+      if (u) validStaffId = params.staff_id;
+    }
+
     await db
       .prepare(
         `INSERT INTO audit_logs (staff_id, staff_name, action, record_type, record_id, previous_value_json, new_value_json, change_summary, ip_address, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
-        params.staff_id,
+        validStaffId,
         params.staff_name,
         params.action,
         params.record_type,
