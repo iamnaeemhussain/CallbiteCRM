@@ -7,6 +7,13 @@ const authApp = new Hono<{ Bindings: Env; Variables: { user: StaffUser } }>();
 
 authApp.post('/login', async (c) => {
   try {
+    if (!c.env || !c.env.DB) {
+      return c.json({
+        success: false,
+        error: 'Cloudflare D1 Database binding "DB" is not connected. Please create the D1 database in your Cloudflare dashboard and bind it under Settings -> Bindings.',
+      }, 500);
+    }
+
     const { email, password } = await c.req.json<{ email?: string; password?: string }>();
 
     if (!email || !password) {
@@ -24,11 +31,11 @@ authApp.post('/login', async (c) => {
       .first<StaffUser & { password?: string }>();
 
     if (!user) {
-      return c.json({ success: false, error: 'Invalid email or password.' }, 401);
+      return c.json({ success: false, error: 'Invalid email or password. Please verify credentials.' }, 401);
     }
 
     if (user.password !== password) {
-      return c.json({ success: false, error: 'Invalid email or password.' }, 401);
+      return c.json({ success: false, error: 'Invalid email or password. Please verify credentials.' }, 401);
     }
 
     if (user.status !== 'active') {
@@ -37,33 +44,34 @@ authApp.post('/login', async (c) => {
 
     const token = createToken(user.id);
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days session
+    const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
     const nowIso = now.toISOString();
 
-    await c.env.DB
-      .prepare(`INSERT OR REPLACE INTO sessions (token, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)`)
-      .bind(token, user.id, expiresAt, nowIso)
-      .run();
+    try {
+      await c.env.DB
+        .prepare(`INSERT OR REPLACE INTO sessions (token, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)`)
+        .bind(token, user.id, expiresAt, nowIso)
+        .run();
 
-    await c.env.DB
-      .prepare(`UPDATE users SET last_login_at = ? WHERE id = ?`)
-      .bind(nowIso, user.id)
-      .run();
+      await c.env.DB
+        .prepare(`UPDATE users SET last_login_at = ? WHERE id = ?`)
+        .bind(nowIso, user.id)
+        .run();
 
-    const clientIp = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '127.0.0.1';
-    await logAudit(c.env.DB, {
-      staff_id: user.id,
-      staff_name: user.name,
-      action: 'LOGIN',
-      record_type: 'STAFF',
-      record_id: user.id,
-      change_summary: `${user.name} logged into staff portal`,
-      ip_address: clientIp,
-    });
+      const clientIp = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '127.0.0.1';
+      await logAudit(c.env.DB, {
+        staff_id: user.id,
+        staff_name: user.name,
+        action: 'LOGIN',
+        record_type: 'STAFF',
+        record_id: user.id,
+        change_summary: `${user.name} logged into staff portal`,
+        ip_address: clientIp,
+      });
+    } catch {}
 
     const { password: _p, ...safeUser } = user;
 
-    // Set cookie for browser session support
     c.header('Set-Cookie', `callbite_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`);
 
     return c.json({
@@ -73,7 +81,7 @@ authApp.post('/login', async (c) => {
     });
   } catch (err: any) {
     console.error('Login error:', err);
-    return c.json({ success: false, error: 'An unexpected error occurred during login. Please try again.' }, 500);
+    return c.json({ success: false, error: err.message || 'An unexpected error occurred during login. Please try again.' }, 500);
   }
 });
 
