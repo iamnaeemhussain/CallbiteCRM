@@ -27,43 +27,21 @@ function sanitizeParams(params: Record<string, any>): Record<string, any> {
 }
 
 async function ensureYesimTables(db: D1Database) {
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS yesim_api_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      staff_id TEXT,
-      staff_name TEXT,
-      action TEXT NOT NULL,
-      endpoint TEXT NOT NULL,
-      request_params_json TEXT,
-      response_json TEXT,
-      status_code INTEGER,
-      success INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS yesim_profiles (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      yesim_id TEXT,
-      iccid TEXT UNIQUE,
-      yesim_user_id TEXT,
-      email TEXT,
-      qrcode TEXT,
-      imsi TEXT,
-      msisdn TEXT,
-      status_qr TEXT,
-      active_plan_id TEXT,
-      plan_activated_at TEXT,
-      plan_expired_at TEXT,
-      data_left_mb REAL,
-      data_package_mb REAL,
-      data_used_mb REAL,
-      ios_tap_link TEXT,
-      raw_json TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_yesim_logs_created ON yesim_api_logs(created_at);
-    CREATE INDEX IF NOT EXISTS idx_yesim_profiles_iccid ON yesim_profiles(iccid);
-  `);
+  // D1 db.exec() splits on newlines, so a multi-line CREATE TABLE becomes
+  // "CREATE TABLE IF NOT EXISTS yesim_api_logs (" and fails with incomplete input.
+  // Use prepare().run() (one full statement each) instead.
+  await db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS yesim_api_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, staff_id TEXT, staff_name TEXT, action TEXT NOT NULL, endpoint TEXT NOT NULL, request_params_json TEXT, response_json TEXT, status_code INTEGER, success INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)`
+    )
+    .run();
+  await db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS yesim_profiles (id INTEGER PRIMARY KEY AUTOINCREMENT, yesim_id TEXT, iccid TEXT UNIQUE, yesim_user_id TEXT, email TEXT, qrcode TEXT, imsi TEXT, msisdn TEXT, status_qr TEXT, active_plan_id TEXT, plan_activated_at TEXT, plan_expired_at TEXT, data_left_mb REAL, data_package_mb REAL, data_used_mb REAL, ios_tap_link TEXT, raw_json TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`
+    )
+    .run();
+  await db.prepare(`CREATE INDEX IF NOT EXISTS idx_yesim_logs_created ON yesim_api_logs(created_at)`).run();
+  await db.prepare(`CREATE INDEX IF NOT EXISTS idx_yesim_profiles_iccid ON yesim_profiles(iccid)`).run();
 }
 
 async function getSetting(db: D1Database, key: string): Promise<string> {
