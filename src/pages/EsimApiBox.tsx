@@ -22,6 +22,8 @@ import {
   FileJson,
   Layers,
   Import,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { Badge } from '../components/common/Badge';
@@ -79,6 +81,8 @@ export const EsimApiBox: React.FC = () => {
   const [eurToPkr, setEurToPkr] = useState('310');
   const [isSavingToken, setIsSavingToken] = useState(false);
   const [isSavingRate, setIsSavingRate] = useState(false);
+  const [showTokenCard, setShowTokenCard] = useState(false);
+  const [showBalanceCard, setShowBalanceCard] = useState(false);
 
   const [balance, setBalance] = useState<any>(null);
   const [isBalanceLoading, setIsBalanceLoading] = useState(false);
@@ -504,10 +508,23 @@ export const EsimApiBox: React.FC = () => {
           {tab === 'token' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
               <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-card space-y-4">
-                <div className="flex items-center gap-2">
-                  <KeyRound className="w-4 h-4 text-emerald-600" />
-                  <h3 className="text-base font-bold text-slate-900">Where to add your API token</h3>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <KeyRound className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <h3 className="text-base font-bold text-slate-900">Where to add your API token</h3>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="xs"
+                    leftIcon={showTokenCard ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    onClick={() => setShowTokenCard((v) => !v)}
+                  >
+                    {showTokenCard ? 'Hide' : 'Show'}
+                  </Button>
                 </div>
+                {showTokenCard && (
+                <>
                 <ol className="text-xs text-slate-600 space-y-2 list-decimal pl-4 leading-relaxed">
                   <li>
                     Open the Yesim partner portal:{' '}
@@ -574,14 +591,29 @@ export const EsimApiBox: React.FC = () => {
                     )}
                   </div>
                 </div>
+                </>
+                )}
               </div>
 
               <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-card space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <Wallet className="w-4 h-4 text-emerald-600" />
                     <h3 className="text-base font-bold text-slate-900">Partner Balance</h3>
                   </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="xs"
+                    leftIcon={showBalanceCard ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    onClick={() => setShowBalanceCard((v) => !v)}
+                  >
+                    {showBalanceCard ? 'Hide' : 'Show'}
+                  </Button>
+                </div>
+                {showBalanceCard && (
+                <>
+                <div className="flex items-center justify-end">
                   <Button
                     variant="primary"
                     size="sm"
@@ -601,6 +633,8 @@ export const EsimApiBox: React.FC = () => {
                   <span className="font-mono">crm.callbite.workers.dev</span> for live API actions.
                 </div>
                 <JsonBlock data={balance} />
+                </>
+                )}
               </div>
             </div>
           )}
