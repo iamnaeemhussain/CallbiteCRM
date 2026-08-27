@@ -14,8 +14,14 @@ settingsApp.get('/', async (c) => {
 
     const settingsRows = await db.prepare(`SELECT key, value, description FROM settings`).all<{ key: string; value: string; description: string }>();
     const settingsMap: Record<string, string> = {};
+    const secretKeys = new Set(['yesim_api_token']);
     (settingsRows.results || []).forEach((row) => {
-      settingsMap[row.key] = row.value;
+      if (secretKeys.has(row.key)) {
+        const val = row.value || '';
+        settingsMap[row.key] = val.length > 10 ? `${val.slice(0, 4)}••••${val.slice(-6)}` : val ? '••••••••' : '';
+      } else {
+        settingsMap[row.key] = row.value;
+      }
     });
 
     const tags = await db.prepare(`SELECT * FROM tags ORDER BY name ASC`).all<any>();

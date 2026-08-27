@@ -238,6 +238,41 @@ CREATE TABLE IF NOT EXISTS sessions (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS yesim_api_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    staff_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    staff_name TEXT,
+    action TEXT NOT NULL,
+    endpoint TEXT NOT NULL,
+    request_params_json TEXT,
+    response_json TEXT,
+    status_code INTEGER,
+    success INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS yesim_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    yesim_id TEXT,
+    iccid TEXT UNIQUE,
+    yesim_user_id TEXT,
+    email TEXT,
+    qrcode TEXT,
+    imsi TEXT,
+    msisdn TEXT,
+    status_qr TEXT,
+    active_plan_id TEXT,
+    plan_activated_at TEXT,
+    plan_expired_at TEXT,
+    data_left_mb REAL,
+    data_package_mb REAL,
+    data_used_mb REAL,
+    ios_tap_link TEXT,
+    raw_json TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 -- Indices for rapid search and foreign key lookups
 CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(whatsapp_number, phone_number);
 CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email);
@@ -253,3 +288,5 @@ CREATE INDEX IF NOT EXISTS idx_support_status ON support_tickets(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due_date, status);
 CREATE INDEX IF NOT EXISTS idx_activity_customer ON activity_timeline(customer_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_yesim_logs_created ON yesim_api_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_yesim_profiles_iccid ON yesim_profiles(iccid);

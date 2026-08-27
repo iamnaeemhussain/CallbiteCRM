@@ -18,6 +18,7 @@ import settingsApp from './routes/settings';
 import searchApp from './routes/search';
 import providersApp from './routes/providers';
 import packagesApp from './routes/packages';
+import yesimApp from './routes/yesim';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: StaffUser } }>();
 
@@ -47,6 +48,7 @@ app.route('/api/settings', settingsApp);
 app.route('/api/search', searchApp);
 app.route('/api/providers', providersApp);
 app.route('/api/packages', packagesApp);
+app.route('/api/yesim', yesimApp);
 
 // Health check endpoint
 app.get('/api/health', (c) => {

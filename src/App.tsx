@@ -22,6 +22,7 @@ import { Referrals } from './pages/Referrals';
 import { Staff } from './pages/Staff';
 import { AuditLogs } from './pages/AuditLogs';
 import { Settings } from './pages/Settings';
+import { EsimApiBox } from './pages/EsimApiBox';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isLoading } = useAuth();
@@ -90,6 +91,7 @@ export function App() {
                     </AdminRoute>
                   }
                 />
+                <Route path="esim-api-box" element={<EsimApiBox />} />
                 <Route path="settings" element={<Settings />} />
               </Route>
 

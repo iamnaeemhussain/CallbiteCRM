@@ -241,6 +241,41 @@ CREATE TABLE IF NOT EXISTS sessions (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS yesim_api_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    staff_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    staff_name TEXT,
+    action TEXT NOT NULL,
+    endpoint TEXT NOT NULL,
+    request_params_json TEXT,
+    response_json TEXT,
+    status_code INTEGER,
+    success INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS yesim_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    yesim_id TEXT,
+    iccid TEXT UNIQUE,
+    yesim_user_id TEXT,
+    email TEXT,
+    qrcode TEXT,
+    imsi TEXT,
+    msisdn TEXT,
+    status_qr TEXT,
+    active_plan_id TEXT,
+    plan_activated_at TEXT,
+    plan_expired_at TEXT,
+    data_left_mb REAL,
+    data_package_mb REAL,
+    data_used_mb REAL,
+    ios_tap_link TEXT,
+    raw_json TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 -- Admin & Staff Logins
 INSERT OR REPLACE INTO users (id, name, email, password, role, phone, status, avatar_url, created_at, updated_at, last_login_at) VALUES
 ('STF-001', 'System Admin', 'Admin@callbite.com', 'Touch@11223', 'ADMIN', '+923000000001', 'active', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150', '2026-01-01T00:00:00Z', '2026-08-23T00:00:00Z', '2026-08-23T08:00:00Z'),

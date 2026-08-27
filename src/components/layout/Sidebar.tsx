@@ -16,6 +16,7 @@ import {
   Radio,
   LogOut,
   ChevronRight,
+  Box,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSettings } from '../../contexts/SettingsContext';
@@ -43,6 +44,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
     { to: '/tasks', label: 'Tasks / Follow-ups', icon: CheckSquare },
     { to: '/staff', label: 'Staff', icon: UserCheck },
     ...(isAdmin ? [{ to: '/audit-logs', label: 'Audit Logs', icon: ShieldAlert }] : []),
+    { to: '/esim-api-box', label: 'eSIM API Box', icon: Box },
     { to: '/settings', label: 'Settings', icon: Settings },
   ];
 
