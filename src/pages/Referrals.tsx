@@ -77,25 +77,10 @@ export const Referrals: React.FC = () => {
     loadAll();
   };
 
-  const saveSheetUrl = async () => {
-    setIsSavingSheet(true);
-    try {
-      await api.put('/api/referrals/sheet', { sheet_url: sheetUrl.trim() });
-      toast.success('Google Sheet URL saved.');
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to save sheet URL.');
-    } finally {
-      setIsSavingSheet(false);
-    }
-  };
-
   const syncSheet = async () => {
     setIsSyncing(true);
     try {
-      if (sheetUrl.trim()) {
-        await api.put('/api/referrals/sheet', { sheet_url: sheetUrl.trim() });
-      }
-      const res = await api.post('/api/referrals/requests/sync-sheet', { sheet_url: sheetUrl.trim() || undefined });
+      const res = await api.post('/api/referrals/requests/sync-sheet', {});
       toast.success(res.message || 'Sheet synced.');
       await loadRequests();
     } catch (err: any) {
