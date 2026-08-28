@@ -42,6 +42,145 @@ async function ensureYesimTables(db: D1Database) {
     .run();
   await db.prepare(`CREATE INDEX IF NOT EXISTS idx_yesim_logs_created ON yesim_api_logs(created_at)`).run();
   await db.prepare(`CREATE INDEX IF NOT EXISTS idx_yesim_profiles_iccid ON yesim_profiles(iccid)`).run();
+  for (const sql of [
+    `ALTER TABLE esims ADD COLUMN data_left_mb REAL`,
+    `ALTER TABLE esims ADD COLUMN data_package_mb REAL`,
+    `ALTER TABLE esims ADD COLUMN data_used_mb REAL`,
+  ]) {
+    try {
+      await db.prepare(sql).run();
+    } catch {
+      // column already exists
+    }
+  }
+}
+
+function toDateStr(value?: string | null): string | null {
+  if (!value) return null;
+  const s = String(value).trim();
+  return s ? s.slice(0, 10) : null;
+}
+
+function formatAllowanceFromMb(mb?: number | null): string | null {
+  if (mb == null || !Number.isFinite(Number(mb))) return null;
+  const n = Number(mb);
+  if (n >= 1024) {
+    const gb = n / 1024;
+    const rounded = Math.abs(gb - Math.round(gb)) < 0.05 ? String(Math.round(gb)) : gb.toFixed(2).replace(/\.?0+$/, '');
+    return `${rounded}GB`;
+  }
+  return `${Math.round(n)}MB`;
+}
+
+function durationFromDates(start?: string | null, end?: string | null): string | null {
+  if (!start || !end) return null;
+  const a = new Date(start);
+  const b = new Date(end);
+  if (isNaN(a.getTime()) || isNaN(b.getTime())) return null;
+  const days = Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
+  if (!Number.isFinite(days) || days <= 0) return null;
+  return `${days} Days`;
+}
+
+function mapYesimStatus(profile: any, expiry?: string | null): 'Pending' | 'Active' | 'Expired' | 'Suspended' | 'Cancelled' {
+  const qr = String(profile?.status_qr || '').toLowerCase();
+  if (qr.includes('delete')) return 'Cancelled';
+  if (qr.includes('disable') || qr.includes('suspend')) return 'Suspended';
+  if (expiry) {
+    const exp = new Date(expiry);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (!isNaN(exp.getTime()) && exp < today) return 'Expired';
+  }
+  if (!profile?.active_plan_id) return 'Pending';
+  return 'Active';
+}
+
+async function ensureUnassignedCustomer(db: D1Database): Promise<string> {
+  const existing = await db.prepare(`SELECT id FROM customers WHERE id = ? AND is_deleted = 0`).bind('CUST-YESIM').first<{ id: string }>();
+  if (existing) return existing.id;
+  const now = new Date().toISOString();
+  try {
+    await db
+      .prepare(
+        `INSERT INTO customers (id, full_name, whatsapp_number, phone_number, email, country, city, source, referred_by_customer_id, status, assigned_staff_id, internal_notes, is_deleted, created_at, updated_at, last_activity_at)
+         VALUES (?, ?, ?, NULL, NULL, NULL, NULL, ?, NULL, ?, NULL, ?, 0, ?, ?, ?)`
+      )
+      .bind('CUST-YESIM', 'Yesim Unassigned', '+920000000000', 'Other', 'Active', 'Holding account for Yesim API eSIMs not yet linked to a customer.', now, now, now)
+      .run();
+    return 'CUST-YESIM';
+  } catch {
+    const byId = await db.prepare(`SELECT id FROM customers WHERE id = ?`).bind('CUST-YESIM').first<{ id: string }>();
+    if (byId) return byId.id;
+    const byPhone = await db.prepare(`SELECT id FROM customers WHERE whatsapp_number = ? AND is_deleted = 0`).bind('+920000000000').first<{ id: string }>();
+    if (byPhone) return byPhone.id;
+    throw new Error('Could not create Yesim unassigned customer for inventory.');
+  }
+}
+
+async function syncEsimInventory(
+  db: D1Database,
+  payload: any,
+  currentUser: StaffUser
+): Promise<{ action: 'created' | 'updated'; esim_id: string; iccid: string; customer_id: string } | null> {
+  const profile = extractProfile(payload);
+  if (!profile?.iccid) return null;
+
+  const iccid = String(profile.iccid).trim();
+  const now = new Date().toISOString();
+  const expiry = toDateStr(profile.plan_expired_at) || now.slice(0, 10);
+  const start = toDateStr(profile.created_at) || now.slice(0, 10);
+  const activation = toDateStr(profile.plan_activated_at) || start;
+  const status = mapYesimStatus(profile, expiry);
+  const qr = profile.qrcode || (typeof profile.img === 'string' && String(profile.img).startsWith('data:') ? profile.img : null);
+  const left = profile.data_left_mb != null ? Number(profile.data_left_mb) : null;
+  const pack = profile.data_package_mb != null ? Number(profile.data_package_mb) : null;
+  const used = profile.data_used_mb != null ? Number(profile.data_used_mb) : null;
+  const allowance = formatAllowanceFromMb(pack) || formatAllowanceFromMb(left);
+  const duration = durationFromDates(profile.plan_activated_at || start, profile.plan_expired_at || expiry) || durationFromDates(start, expiry);
+  const planLabel = allowance && duration ? `${allowance} — ${duration}` : allowance || (profile.active_plan_id ? `Yesim Plan ${profile.active_plan_id}` : 'Yesim eSIM');
+  const staffId = currentUser?.id || null;
+  const note = [profile.imsi ? `IMSI ${profile.imsi}` : '', profile.user_id ? `Yesim user ${profile.user_id}` : '', profile.status_qr ? `QR status ${profile.status_qr}` : ''].filter(Boolean).join(' • ');
+
+  const existing = await db.prepare(`SELECT * FROM esims WHERE iccid = ?`).bind(iccid).first<any>();
+
+  if (existing) {
+    await db
+      .prepare(
+        `UPDATE esims SET expiry_date = ?, activation_date = COALESCE(?, activation_date), start_date = COALESCE(start_date, ?), status = ?, qr_code_data = COALESCE(?, qr_code_data), data_allowance = ?, duration = ?, package_name = ?, provider = CASE WHEN provider IS NULL OR provider = '' THEN 'Yesim' ELSE provider END, data_left_mb = ?, data_package_mb = ?, data_used_mb = ?, notes = CASE WHEN notes IS NULL OR notes = '' THEN ? ELSE notes END, is_deleted = 0, updated_at = ? WHERE iccid = ?`
+      )
+      .bind(expiry || existing.expiry_date, activation, start, status, qr, allowance || existing.data_allowance, duration || existing.duration, planLabel || existing.package_name, left, pack, used, note || null, now, iccid)
+      .run();
+    return { action: 'updated', esim_id: existing.id, iccid, customer_id: existing.customer_id };
+  }
+
+  const customerId = await ensureUnassignedCustomer(db);
+  const esimId = await generateId(db, 'esims', 'ESIM', 2001);
+  let validStaff: string | null = null;
+  if (staffId) {
+    const u = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(staffId).first<{ id: string }>();
+    if (u) validStaff = u.id;
+  }
+
+  await db
+    .prepare(
+      `INSERT INTO esims (id, customer_id, iccid, country_region, provider, provider_id, package_name, package_id, data_allowance, duration, start_date, expiry_date, renewal_date, activation_date, status, qr_code_data, apn_info, tag, notes, created_by_staff_id, is_deleted, created_at, updated_at, data_left_mb, data_package_mb, data_used_mb) VALUES (?, ?, ?, ?, ?, NULL, ?, NULL, ?, ?, ?, ?, NULL, ?, ?, ?, NULL, ?, ?, ?, 0, ?, ?, ?, ?, ?)`
+    )
+    .bind(esimId, customerId, iccid, 'Global', 'Yesim', planLabel, allowance || 'Data', duration || 'Yesim plan', start, expiry, activation, status, qr, 'Yesim API', note || null, validStaff, now, now, left, pack, used)
+    .run();
+
+  try {
+    await logTimeline(db, {
+      customer_id: customerId,
+      staff_id: validStaff,
+      action_type: 'ESIM_ADDED',
+      title: `eSIM imported from Yesim (${iccid})`,
+      description: `${currentUser.name} saved Yesim ICCID ${iccid} to eSIM Inventory.`,
+      metadata: { iccid, esim_id: esimId, source: 'sim_info' },
+    });
+  } catch {}
+
+  return { action: 'created', esim_id: esimId, iccid, customer_id: customerId };
 }
 
 async function getSetting(db: D1Database, key: string): Promise<string> {
@@ -547,7 +686,13 @@ yesimApp.get('/sim-info', async (c) => {
   });
   if (!result.ok) return jsonFail(c, result);
   await upsertProfile(db, result.data);
-  return c.json({ success: true, data: result.data });
+  let inventory = null;
+  try {
+    inventory = await syncEsimInventory(db, result.data, c.get('user'));
+  } catch (err) {
+    console.error('sim_info inventory sync failed:', err);
+  }
+  return c.json({ success: true, data: result.data, inventory });
 });
 
 yesimApp.get('/user', async (c) => {
@@ -674,10 +819,19 @@ yesimApp.post('/bulk-sim-info', async (c) => {
   });
   if (!result.ok) return jsonFail(c, result);
   const items = Array.isArray(result.data) ? result.data : result.data?.esims || result.data?.data || [];
+  const inventory: any[] = [];
   if (Array.isArray(items)) {
-    for (const item of items) await upsertProfile(db, item);
+    for (const item of items) {
+      await upsertProfile(db, item);
+      try {
+        const synced = await syncEsimInventory(db, item, c.get('user'));
+        if (synced) inventory.push(synced);
+      } catch (err) {
+        console.error('bulk sim_info inventory sync failed:', err);
+      }
+    }
   }
-  return c.json({ success: true, data: result.data });
+  return c.json({ success: true, data: result.data, inventory });
 });
 
 yesimApp.get('/allowed-operators', async (c) => {

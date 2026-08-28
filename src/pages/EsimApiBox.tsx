@@ -325,7 +325,13 @@ export const EsimApiBox: React.FC = () => {
     try {
       const res = await api.get('/api/yesim/sim-info', { iccid: lookupIccid.trim() });
       setLookupResult(res.data);
-      toast.success('SIM info loaded.');
+      if (res.inventory?.action === 'created') {
+        toast.success(`Saved to eSIM Inventory as ${res.inventory.esim_id}.`);
+      } else if (res.inventory?.action === 'updated') {
+        toast.success(`Updated eSIM Inventory ${res.inventory.esim_id}.`);
+      } else {
+        toast.success('SIM info loaded.');
+      }
     } catch (err: any) {
       toast.error(err.message || 'Failed to load SIM info.');
     } finally {

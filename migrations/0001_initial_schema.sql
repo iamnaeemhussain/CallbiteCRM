@@ -101,6 +101,9 @@ CREATE TABLE IF NOT EXISTS esims (
     apn_info TEXT,
     tag TEXT, -- eSIM specific tag (e.g. Primary SIM, Data Roaming, Umrah Special)
     notes TEXT,
+    data_left_mb REAL,
+    data_package_mb REAL,
+    data_used_mb REAL,
     created_by_staff_id TEXT REFERENCES users(id) ON DELETE SET NULL,
     is_deleted INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
