@@ -1,10 +1,128 @@
 import { Hono } from 'hono';
 import { Env, StaffUser } from '../types';
 import { authMiddleware } from '../auth';
+import { generateId, logAudit } from '../db';
+import { ensureReferralRequestTables } from '../referral-tables';
 
 const referralsApp = new Hono<{ Bindings: Env; Variables: { user: StaffUser } }>();
 
 referralsApp.use('*', authMiddleware);
+
+referralsApp.get('/requests', async (c) => {
+  try {
+    const db = c.env.DB;
+    await ensureReferralRequestTables(db);
+    const { status, search } = c.req.query();
+    let query = `SELECT * FROM referral_requests WHERE 1=1`;
+    const params: any[] = [];
+    if (status) {
+      query += ` AND status = ?`;
+      params.push(status);
+    }
+    if (search && search.trim()) {
+      const s = `%${search.trim()}%`;
+      query += ` AND (friend_name LIKE ? OR friend_whatsapp LIKE ? OR referrer_name LIKE ? OR id LIKE ?)`;
+      params.push(s, s, s, s);
+    }
+    query += ` ORDER BY created_at DESC LIMIT 200`;
+    const rows = await db.prepare(query).bind(...params).all<any>();
+    const all = rows.results || [];
+    const counts = {
+      total: all.length,
+      new: all.filter((r) => r.status === 'New').length,
+      contacted: all.filter((r) => r.status === 'Contacted').length,
+      converted: all.filter((r) => r.status === 'Converted').length,
+    };
+    return c.json({ success: true, requests: all, counts });
+  } catch (err: any) {
+    console.error('List referral requests error:', err);
+    return c.json({ success: true, requests: [], counts: { total: 0, new: 0, contacted: 0, converted: 0 } });
+  }
+});
+
+referralsApp.put('/requests/:id', async (c) => {
+  try {
+    const db = c.env.DB;
+    await ensureReferralRequestTables(db);
+    const id = c.req.param('id');
+    const body = await c.req.json<{ status?: string }>();
+    const allowed = ['New', 'Contacted', 'Converted', 'Declined'];
+    if (!body.status || !allowed.includes(body.status)) {
+      return c.json({ success: false, error: 'Valid status is required.' }, 400);
+    }
+    const existing = await db.prepare(`SELECT * FROM referral_requests WHERE id = ?`).bind(id).first<any>();
+    if (!existing) return c.json({ success: false, error: 'Referral request not found.' }, 404);
+    await db
+      .prepare(`UPDATE referral_requests SET status = ?, updated_at = ? WHERE id = ?`)
+      .bind(body.status, new Date().toISOString(), id)
+      .run();
+    return c.json({ success: true, message: 'Referral request updated.' });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message || 'Failed to update request.' }, 500);
+  }
+});
+
+referralsApp.post('/requests/:id/convert', async (c) => {
+  try {
+    const db = c.env.DB;
+    const currentUser = c.get('user');
+    await ensureReferralRequestTables(db);
+    const id = c.req.param('id');
+    const existing = await db.prepare(`SELECT * FROM referral_requests WHERE id = ?`).bind(id).first<any>();
+    if (!existing) return c.json({ success: false, error: 'Referral request not found.' }, 404);
+
+    const now = new Date().toISOString();
+    let customerId = existing.converted_customer_id as string | null;
+    if (!customerId) {
+      const dup = await db
+        .prepare(`SELECT id FROM customers WHERE whatsapp_number = ? AND is_deleted = 0`)
+        .bind(existing.friend_whatsapp)
+        .first<{ id: string }>();
+      if (dup) {
+        customerId = dup.id;
+      } else {
+        customerId = await generateId(db, 'customers', 'CUST', 1016);
+        await db
+          .prepare(
+            `INSERT INTO customers (id, full_name, whatsapp_number, phone_number, email, country, city, source, referred_by_customer_id, status, assigned_staff_id, internal_notes, is_deleted, created_at, updated_at, last_activity_at)
+             VALUES (?, ?, ?, NULL, NULL, NULL, NULL, ?, NULL, 'Active', ?, ?, 0, ?, ?, ?)`
+          )
+          .bind(
+            customerId,
+            existing.friend_name,
+            existing.friend_whatsapp,
+            'Referred by',
+            currentUser.id,
+            [existing.friend_phone_model ? `Phone model: ${existing.friend_phone_model}` : '', existing.notes || '', existing.referrer_name ? `Referred via web form by ${existing.referrer_name}` : 'Submitted via pak-tel.com/refer-a-friend']
+              .filter(Boolean)
+              .join('\n'),
+            now,
+            now,
+            now
+          )
+          .run();
+      }
+    }
+
+    await db
+      .prepare(`UPDATE referral_requests SET status = 'Converted', converted_customer_id = ?, updated_at = ? WHERE id = ?`)
+      .bind(customerId, now, id)
+      .run();
+
+    await logAudit(db, {
+      staff_id: currentUser.id,
+      staff_name: currentUser.name,
+      action: 'CREATE',
+      record_type: 'CUSTOMER',
+      record_id: customerId!,
+      change_summary: `${currentUser.name} converted referral request ${id} into customer ${customerId}`,
+    });
+
+    return c.json({ success: true, message: 'Converted to customer.', customer_id: customerId });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message || 'Failed to convert referral.' }, 500);
+  }
+});
 
 // Get referrals overview and list
 referralsApp.get('/', async (c) => {

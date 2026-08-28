@@ -234,6 +234,23 @@ CREATE TABLE IF NOT EXISTS package_presets (
     is_active INTEGER NOT NULL DEFAULT 1
 );
 
+CREATE TABLE IF NOT EXISTS referral_requests (
+    id TEXT PRIMARY KEY,
+    friend_name TEXT NOT NULL,
+    friend_whatsapp TEXT NOT NULL,
+    friend_phone_model TEXT,
+    notes TEXT,
+    referrer_name TEXT,
+    referrer_phone TEXT,
+    referrer_email TEXT,
+    source TEXT NOT NULL DEFAULT 'pak-tel.com',
+    status TEXT NOT NULL DEFAULT 'New',
+    converted_customer_id TEXT,
+    ip_address TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS sessions (
     token TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
