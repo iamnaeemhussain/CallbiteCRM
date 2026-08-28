@@ -26,6 +26,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useToast } from '../contexts/ToastContext';
 import { api } from '../utils/api';
 import { formatDate, getExpiryBadge } from '../utils/formatters';
+import { DataUsageMeter } from '../components/common/DataUsageMeter';
 
 export const Esims: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -234,13 +235,13 @@ export const Esims: React.FC = () => {
             <table className="w-full text-left text-xs">
               <thead className="border-b border-slate-100 bg-slate-50/75 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="px-5 py-3.5">eSIM / ICCID</th>
-                  <th className="px-4 py-3.5">Customer</th>
-                  <th className="px-4 py-3.5">Region & Provider</th>
-                  <th className="px-4 py-3.5">Package & Allowance</th>
-                  <th className="px-4 py-3.5">Expiry Date</th>
-                  <th className="px-4 py-3.5">Status</th>
-                  <th className="px-5 py-3.5 text-right">Quick Actions</th>
+                  <th className="px-4 py-3.5">eSIM / ICCID</th>
+                  <th className="px-3 py-3.5">Customer</th>
+                  <th className="px-3 py-3.5">Package & Allowance</th>
+                  <th className="px-3 py-3.5">Data usage</th>
+                  <th className="px-3 py-3.5">Expiry Date</th>
+                  <th className="px-3 py-3.5">Status</th>
+                  <th className="px-4 py-3.5 text-right">Quick Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">

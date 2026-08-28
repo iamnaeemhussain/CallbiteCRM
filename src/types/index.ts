@@ -106,6 +106,9 @@ export interface Esim {
   apn_info?: string | null;
   tag?: string | null;
   notes?: string | null;
+  data_left_mb?: number | null;
+  data_package_mb?: number | null;
+  data_used_mb?: number | null;
   created_by_staff_id?: string | null;
   created_by_staff_name?: string | null;
   created_at: string;

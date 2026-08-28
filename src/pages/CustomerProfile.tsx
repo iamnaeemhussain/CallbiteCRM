@@ -531,6 +531,14 @@ export const CustomerProfile: React.FC = () => {
                           </span>
                         </div>
                       </div>
+
+                      <div className="mt-3">
+                        <DataUsageMeter
+                          dataLeftMb={e.data_left_mb}
+                          dataPackageMb={e.data_package_mb}
+                          dataUsedMb={e.data_used_mb}
+                        />
+                      </div>
                     </div>
 
                     {/* Bottom Actions Bar */}
