@@ -49,6 +49,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useToast } from '../contexts/ToastContext';
 import { api } from '../utils/api';
 import { formatCurrency, formatDate, getExpiryBadge } from '../utils/formatters';
+import { DataUsageMeter } from '../components/common/DataUsageMeter';
 
 export const CustomerProfile: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -107,7 +108,7 @@ export const CustomerProfile: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [id, toast]);
+  }, [id]);
 
   useEffect(() => {
     loadProfile();
