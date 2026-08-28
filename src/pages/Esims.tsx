@@ -237,7 +237,6 @@ export const Esims: React.FC = () => {
                 <tr>
                   <th className="px-4 py-3.5">eSIM / ICCID</th>
                   <th className="px-3 py-3.5">Customer</th>
-                  <th className="px-3 py-3.5">Package & Allowance</th>
                   <th className="px-3 py-3.5">Data usage</th>
                   <th className="px-3 py-3.5">Expiry Date</th>
                   <th className="px-3 py-3.5">Status</th>
@@ -268,24 +267,16 @@ export const Esims: React.FC = () => {
                         <div className="font-mono text-slate-500 text-[11px]">{e.customer_phone}</div>
                       </td>
 
-                      <td className="px-4 py-4">
-                        <div className="font-semibold text-slate-900">{e.country_region}</div>
-                        <div className="text-[11px] text-slate-400">{e.provider}</div>
-                        <div className="mt-1">
-                          <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-slate-900 text-emerald-400 border border-slate-800">
-                            {e.tag || 'Primary SIM'}
-                          </span>
-                        </div>
+                      <td className="px-3 py-4 min-w-[170px]" onClick={(ev) => ev.stopPropagation()}>
+                        <DataUsageMeter
+                          dataLeftMb={e.data_left_mb}
+                          dataPackageMb={e.data_package_mb}
+                          dataUsedMb={e.data_used_mb}
+                          compact
+                        />
                       </td>
 
-                      <td className="px-4 py-4">
-                        <div className="font-bold text-emerald-700">{e.package_name}</div>
-                        <div className="text-slate-500 text-[11px]">
-                          {e.data_allowance} • {e.duration}
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-4">
+                      <td className="px-3 py-4 whitespace-nowrap">
                         <div className="font-bold text-slate-900">{formatDate(e.expiry_date)}</div>
                         <span className={`px-2 py-0.5 rounded-full border text-[10px] font-semibold ${expiryBadge.color}`}>
                           {expiryBadge.text}
