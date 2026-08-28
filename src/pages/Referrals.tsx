@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Share2,
   Users,
   Search,
   ArrowRight,
   Inbox,
   CheckCircle2,
   Phone,
-  Copy,
+  RefreshCw,
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { Badge, getStatusBadge } from '../components/common/Badge';
@@ -33,13 +32,11 @@ export const Referrals: React.FC = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [convertingId, setConvertingId] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const { formatPrice } = useSettings();
   const toast = useToast();
   const navigate = useNavigate();
-
-  const ingestUrl =
-    typeof window !== 'undefined' ? `${window.location.origin}/api/public/referral-requests` : '/api/public/referral-requests';
 
   const loadNetwork = async () => {
     try {
@@ -80,12 +77,31 @@ export const Referrals: React.FC = () => {
     loadAll();
   };
 
-  const copyIngest = async () => {
+  const saveSheetUrl = async () => {
+    setIsSavingSheet(true);
     try {
-      await navigator.clipboard.writeText(ingestUrl);
-      toast.success('Form endpoint copied.');
-    } catch {
-      toast.error('Could not copy.');
+      await api.put('/api/referrals/sheet', { sheet_url: sheetUrl.trim() });
+      toast.success('Google Sheet URL saved.');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save sheet URL.');
+    } finally {
+      setIsSavingSheet(false);
+    }
+  };
+
+  const syncSheet = async () => {
+    setIsSyncing(true);
+    try {
+      if (sheetUrl.trim()) {
+        await api.put('/api/referrals/sheet', { sheet_url: sheetUrl.trim() });
+      }
+      const res = await api.post('/api/referrals/requests/sync-sheet', { sheet_url: sheetUrl.trim() || undefined });
+      toast.success(res.message || 'Sheet synced.');
+      await loadRequests();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to sync Google Sheet.');
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -123,7 +139,7 @@ export const Referrals: React.FC = () => {
         <div>
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">Customer Referrals</h2>
           <p className="text-xs text-slate-500 mt-1">
-            Web form submissions from pak-tel.com/refer-a-friend, plus in-CRM referral tracking
+            Referral requests from the Google Sheet, plus in-CRM referral tracking
           </p>
         </div>
         <Button variant="secondary" leftIcon={<Users className="w-4 h-4" />} onClick={() => navigate('/customers')}>
@@ -167,42 +183,25 @@ export const Referrals: React.FC = () => {
             </div>
           </div>
 
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-card space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">How to send pak-tel.com form submissions into D1</h3>
-                <p className="text-xs text-slate-500 mt-1">
-                  Point the Refer a Friend form on{' '}
-                  <a className="font-bold text-emerald-700" href="https://pak-tel.com/refer-a-friend" target="_blank" rel="noreferrer">
-                    pak-tel.com/refer-a-friend
-                  </a>{' '}
-                  at this public Worker endpoint. Rows land in the same <span className="font-mono">callbite-crm</span> D1 table{' '}
-                  <span className="font-mono">referral_requests</span>.
-                </p>
-              </div>
-              <Button size="xs" variant="secondary" leftIcon={<Copy className="w-3.5 h-3.5" />} onClick={copyIngest}>
-                Copy endpoint
-              </Button>
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-card flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Google Sheet inbox</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Rows sync from{' '}
+                <a
+                  className="font-bold text-emerald-700"
+                  href="https://docs.google.com/spreadsheets/d/1vCRClg8BR3K_yWH3Y-TUiiqsYwsqtOCjaBg_lm1ZKRg/edit?gid=0#gid=0"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Refer a Friend responses
+                </a>
+                : name, WhatsApp, phone model, notes.
+              </p>
             </div>
-            <code className="block text-[11px] font-mono bg-slate-950 text-emerald-300 rounded-xl p-3 break-all">{ingestUrl}</code>
-            <pre className="text-[10px] leading-relaxed font-mono bg-slate-50 border border-slate-200 rounded-xl p-3 overflow-auto text-slate-700">{`form.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const res = await fetch('${ingestUrl}', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      friend_name: form.friend_name.value,
-      friend_whatsapp: form.friend_whatsapp.value,
-      friend_phone_model: form.friend_phone_model.value,
-      notes: form.notes.value,
-      permission: form.permission.checked,
-      referrer_name: form.referrer_name?.value || '',
-      referrer_phone: form.referrer_phone?.value || ''
-    })
-  });
-  const data = await res.json();
-  if (!data.success) alert(data.error);
-});`}</pre>
+            <Button variant="primary" leftIcon={<RefreshCw className="w-4 h-4" />} isLoading={isSyncing} onClick={syncSheet}>
+              Sync sheet
+            </Button>
           </div>
 
           <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-3">
@@ -235,7 +234,7 @@ export const Referrals: React.FC = () => {
             {requests.length === 0 ? (
               <div className="p-12 text-center text-slate-400 text-xs">
                 <Inbox className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-                No web referral requests yet. Wire the Pak-Tel form to the endpoint above.
+                No referral requests yet. Click Sync sheet to import Google Sheet rows.
               </div>
             ) : (
               <div className="overflow-x-auto">
