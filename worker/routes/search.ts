@@ -17,8 +17,6 @@ searchApp.get('/', async (c) => {
         results: {
           customers: [],
           esims: [],
-          transactions: [],
-          support_tickets: [],
         },
       });
     }
@@ -64,50 +62,12 @@ searchApp.get('/', async (c) => {
       .bind(s, s, s, s)
       .all<any>();
 
-    // 3. Search Transactions (by ID, reference)
-    const transactions = await db
-      .prepare(
-        `SELECT 
-          t.id, t.transaction_type, t.package_name, t.selling_price, t.payment_method, t.payment_status, t.date, t.customer_id,
-          c.full_name AS customer_name
-         FROM transactions t
-         JOIN customers c ON t.customer_id = c.id
-         WHERE (
-           t.id LIKE ? OR
-           t.reference_id LIKE ? OR
-           t.package_name LIKE ?
-         )
-         LIMIT 6`
-      )
-      .bind(s, s, s)
-      .all<any>();
-
-    // 4. Search Support Tickets (by ID, description, issue type)
-    const supportTickets = await db
-      .prepare(
-        `SELECT 
-          s.id, s.issue_type, s.priority, s.status, s.description, s.created_at, s.customer_id,
-          c.full_name AS customer_name
-         FROM support_tickets s
-         JOIN customers c ON s.customer_id = c.id
-         WHERE (
-           s.id LIKE ? OR
-           s.description LIKE ? OR
-           s.issue_type LIKE ?
-         )
-         LIMIT 6`
-      )
-      .bind(s, s, s)
-      .all<any>();
-
     return c.json({
       success: true,
       query: clean,
       results: {
         customers: customers.results || [],
         esims: esims.results || [],
-        transactions: transactions.results || [],
-        support_tickets: supportTickets.results || [],
       },
     });
   } catch (err: any) {

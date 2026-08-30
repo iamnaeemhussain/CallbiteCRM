@@ -35,16 +35,12 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
   esim,
   onSuccess,
 }) => {
-  const { packages: contextPackages, providers: contextProviders, currencySymbol, refreshSettings } = useSettings();
+  const { currencySymbol } = useSettings();
   const toast = useToast();
 
   const isEdit = Boolean(esim);
 
   // Live packages and providers fetched directly from database
-  const [catalogPackages, setCatalogPackages] = useState<EsimPackage[]>([]);
-  const [catalogProviders, setCatalogProviders] = useState<EsimProvider[]>([]);
-  const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
-
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [selectedPackageId, setSelectedPackageId] = useState('');
   const [iccid, setIccid] = useState('');
@@ -79,33 +75,17 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
   // Fetch latest packages and providers from backend when modal opens
   useEffect(() => {
     if (isOpen) {
-      setIsLoadingCatalog(true);
       Promise.all([
-        api.get('/api/packages').catch(() => ({ success: false, packages: [] })),
-        api.get('/api/providers').catch(() => ({ success: false, providers: [] })),
         !customerId ? api.get('/api/customers', { limit: 100 }).catch(() => ({ success: false, customers: [] })) : Promise.resolve({ success: false, customers: [] }),
-      ])
-        .then(([pkgRes, prvRes, custRes]) => {
-          if (pkgRes && pkgRes.success && pkgRes.packages) {
-            setCatalogPackages(pkgRes.packages);
-          }
-          if (prvRes && prvRes.success && prvRes.providers) {
-            setCatalogProviders(prvRes.providers);
-          }
-          if (custRes && custRes.success && custRes.customers) {
-            setAllCustomers(custRes.customers);
-          }
-        })
-        .finally(() => {
-          setIsLoadingCatalog(false);
-        });
+      ]).then(([custRes]) => {
+        if (custRes && custRes.success && custRes.customers) {
+          setAllCustomers(custRes.customers);
+        }
+      });
     }
   }, [isOpen, customerId]);
 
   // Combined packages list: prioritize freshly fetched catalog packages
-  const packagesList = catalogPackages.length > 0 ? catalogPackages : contextPackages;
-  const providersList = catalogProviders.length > 0 ? catalogProviders : contextProviders;
-
   useEffect(() => {
     if (esim) {
       setSelectedCustomerId(esim.customer_id);
@@ -143,8 +123,8 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
       const generatedIccid = `890141032111185${Math.floor(1000 + Math.random() * 9000)}F`;
       setIccid(generatedIccid);
       setCountryRegion('Pakistan');
-      setProvider(providersList.length > 0 ? providersList[0].name : 'Callbite Partner');
-      setProviderId(providersList.length > 0 ? providersList[0].id : '');
+      setProvider('Callbite Partner');
+      setProviderId('');
       setPackageName('');
       setPackageId('');
       setSelectedPackageId('');
@@ -171,57 +151,11 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
       setCostPrice('2800');
       setPaymentMethod('Easypaisa');
     }
-  }, [esim, customerId, isOpen, providersList.length]);
-
-  // When a Package is selected from the catalog dropdown -> AUTO FILL ALL FIELDS!
-  const handlePackageDropdownChange = (pkgId: string) => {
-    setSelectedPackageId(pkgId);
-    if (!pkgId) {
-      return;
-    }
-
-    const foundPkg = packagesList.find((p) => String(p.id) === pkgId || p.package_name === pkgId);
-
-    if (foundPkg) {
-      setPackageName(foundPkg.package_name);
-      setPackageId(foundPkg.id);
-      setCountryRegion(foundPkg.country_region);
-      setDataAllowance(foundPkg.data_allowance); // AUTO-FILL DATA ALLOWANCE
-      setDuration(foundPkg.duration);           // AUTO-FILL DURATION
-      setProvider(foundPkg.provider || 'Callbite Partner');
-      setProviderId(foundPkg.provider_id || '');
-
-      const sell = foundPkg.selling_price !== undefined ? foundPkg.selling_price : 4500;
-      const cost = foundPkg.cost_price !== undefined ? foundPkg.cost_price : 2800;
-      setSellingPrice(sell.toString());
-      setCostPrice(cost.toString());
-
-      if (foundPkg.features) {
-        setApnInfo(`APN: internet • ${foundPkg.features}`);
-      } else {
-        setApnInfo('APN: internet');
-      }
-
-      // Auto-compute expiry date based on package duration
-      const daysMatch = (foundPkg.duration || '30 Days').match(/(\d+)\s*Days?/i);
-      const days = daysMatch ? parseInt(daysMatch[1], 10) : 30;
-      const baseDate = startDate ? new Date(startDate) : new Date();
-      const d = new Date(baseDate);
-      d.setDate(d.getDate() + days);
-      setExpiryDate(d.toISOString().slice(0, 10));
-
-      if (iccid && qrInputMode === 'lpa') {
-        const countryCode = foundPkg.country_region.slice(0, 2).toUpperCase();
-        const cleanAllowance = foundPkg.data_allowance.replace(/\s+/g, '');
-        setQrCodeData(`LPA:1$smdp.io$CALLBITE-${countryCode}-${cleanAllowance}-${iccid}`);
-      }
-    }
-  };
+  }, [esim, customerId, isOpen]);
 
   const handleProviderSelect = (selectedName: string) => {
     setProvider(selectedName);
-    const found = providersList.find((p) => p.name === selectedName);
-    setProviderId(found ? found.id : '');
+    setProviderId('');
   };
 
   const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -408,44 +342,18 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
             />
           </div>
 
-          {/* PACKAGE NAME DROPDOWN (FETCHED DIRECTLY FROM eSIM Packages & Bundles) */}
-          <div className="sm:col-span-2 p-3.5 bg-emerald-50/40 rounded-2xl border border-emerald-200">
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-emerald-950 flex items-center gap-1.5">
-                <Package className="w-4 h-4 text-emerald-600" />
-                Package Name * (Select Bundle to Auto-Fill Allowance & Duration)
-              </label>
-              {isLoadingCatalog && <Loader2 className="w-3.5 h-3.5 text-emerald-600 animate-spin" />}
-            </div>
-
-            <select
-              value={selectedPackageId}
-              onChange={(e) => handlePackageDropdownChange(e.target.value)}
-              className="w-full text-xs font-bold rounded-xl border border-emerald-300 bg-white px-3.5 py-2.5 text-slate-900 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500 shadow-sm"
-            >
-              <option value="">
-                {packagesList.length === 0
-                  ? '-- No packages in catalog (Type custom package below or add in Packages) --'
-                  : '-- Choose Package Bundle from Catalog --'}
-              </option>
-              {packagesList.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.package_name} — {p.country_region} ({p.data_allowance} / {p.duration}) — Rs. {Number(p.selling_price).toLocaleString()}
-                </option>
-              ))}
-            </select>
-
-            <div className="mt-2 flex items-center gap-2">
-              <span className="text-[11px] font-semibold text-slate-500 shrink-0">Package Name:</span>
-              <input
-                type="text"
-                required
-                value={packageName}
-                onChange={(e) => setPackageName(e.target.value)}
-                placeholder="e.g. Pakistan 20GB Standard"
-                className="flex-1 text-xs font-bold rounded-lg border border-slate-300 px-2.5 py-1.5 text-slate-900 bg-white"
-              />
-            </div>
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+              Package Name *
+            </label>
+            <input
+              type="text"
+              required
+              value={packageName}
+              onChange={(e) => setPackageName(e.target.value)}
+              placeholder="e.g. Pakistan 20GB Standard"
+              className="w-full text-sm font-bold rounded-xl border border-slate-300 px-3.5 py-2 text-slate-900 bg-white"
+            />
           </div>
 
           <div>
@@ -766,75 +674,7 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
           />
         </div>
 
-        {/* Transaction Recording on New eSIM in PKR */}
-        {!isEdit && (
-          <div className="pt-3 border-t border-slate-200">
-            <label className="flex items-center gap-2 text-xs font-bold text-slate-800 uppercase tracking-wider cursor-pointer mb-3 select-none">
-              <input
-                type="checkbox"
-                checked={recordTransaction}
-                onChange={(e) => setRecordTransaction(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-              />
-              <span>Record Purchase Transaction for this eSIM</span>
-            </label>
 
-            {recordTransaction && (
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3 animate-modal">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-                    Selling Price ({currencySymbol})
-                  </label>
-                  <input
-                    type="number"
-                    step="1"
-                    value={sellingPrice}
-                    onChange={(e) => setSellingPrice(e.target.value)}
-                    className="w-full text-sm font-bold font-mono rounded-lg border border-slate-300 px-3 py-1.5 text-slate-900 bg-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-                    Cost Price ({currencySymbol})
-                  </label>
-                  <input
-                    type="number"
-                    step="1"
-                    value={costPrice}
-                    onChange={(e) => setCostPrice(e.target.value)}
-                    className="w-full text-sm font-mono rounded-lg border border-slate-300 px-3 py-1.5 text-slate-900 bg-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-                    Payment Method
-                  </label>
-                  <select
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    className="w-full text-sm rounded-lg border border-slate-300 px-3 py-1.5 text-slate-900 bg-white"
-                  >
-                    <option value="Easypaisa">Easypaisa</option>
-                    <option value="JazzCash">JazzCash</option>
-                    <option value="Bank Transfer">Bank Transfer</option>
-                    <option value="Cash">Cash</option>
-                    <option value="Card">Card</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-
-                <div className="sm:col-span-3 pt-2 text-xs font-semibold text-emerald-700 flex items-center justify-between">
-                  <span>
-                    Estimated Profit: {currencySymbol} {calculateProfit().toLocaleString()}
-                  </span>
-                  <span className="text-slate-400 font-normal">Auto-recorded under Transactions & Timeline</span>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
       </form>
     </Modal>
   );

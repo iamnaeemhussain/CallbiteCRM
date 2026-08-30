@@ -9,10 +9,7 @@ import {
   Share2,
   CardSim as SimCard,
   RefreshCw,
-  Receipt,
-  HelpCircle,
   MessageSquare,
-  CheckSquare,
   FileText,
   Clock,
   Plus,
@@ -21,7 +18,6 @@ import {
   QrCode,
   ExternalLink,
   ChevronLeft,
-  DollarSign,
   Pin,
   CheckCircle2,
   Sparkles,
@@ -40,12 +36,8 @@ import { WhatsAppModal } from '../components/common/WhatsAppModal';
 import { CustomerFormModal } from '../components/customer/CustomerFormModal';
 import { EsimFormModal } from '../components/customer/EsimFormModal';
 import { RenewEsimModal } from '../components/customer/RenewEsimModal';
-import { TransactionFormModal } from '../components/customer/TransactionFormModal';
-import { SupportTicketModal } from '../components/customer/SupportTicketModal';
 import { InteractionModal } from '../components/customer/InteractionModal';
-import { TaskFormModal } from '../components/customer/TaskFormModal';
 import { NoteFormModal } from '../components/customer/NoteFormModal';
-import { useSettings } from '../contexts/SettingsContext';
 import { useToast } from '../contexts/ToastContext';
 import { api } from '../utils/api';
 import { formatCurrency, formatDate, getExpiryBadge } from '../utils/formatters';
@@ -67,20 +59,11 @@ export const CustomerProfile: React.FC = () => {
   const [renewingEsim, setRenewingEsim] = useState<any | null>(null);
   const [qrModalEsim, setQrModalEsim] = useState<any | null>(null);
 
-  // Transactions Modals
-  const [isAddTransactionOpen, setIsAddTransactionOpen] = useState(false);
-  const [editingTransaction, setEditingTransaction] = useState<any | null>(null);
 
-  // Support Modals
-  const [isAddSupportOpen, setIsAddSupportOpen] = useState(false);
-  const [editingSupport, setEditingSupport] = useState<any | null>(null);
 
   // Interaction Modal
   const [isAddInteractionOpen, setIsAddInteractionOpen] = useState(false);
 
-  // Task Modals
-  const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState<any | null>(null);
 
   // Note Modals
   const [isAddNoteOpen, setIsAddNoteOpen] = useState(false);
@@ -89,7 +72,7 @@ export const CustomerProfile: React.FC = () => {
   // Deletion confirm
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: string; id: any; name: string } | null>(null);
 
-  const { formatPrice, currencySymbol } = useSettings();
+  const { formatPrice } = useSettings();
   const toast = useToast();
   const navigate = useNavigate();
 
@@ -118,34 +101,6 @@ export const CustomerProfile: React.FC = () => {
     setSearchParams({ tab: tabName });
   };
 
-  // Quick 1-click resolve support ticket
-  const handleQuickResolveTicket = async (ticket: any) => {
-    try {
-      await api.put(`/api/support/${ticket.id}`, {
-        status: 'Resolved',
-        resolution: ticket.resolution || 'Issue resolved by staff member.',
-      });
-      toast.success(`Ticket #${ticket.id} marked as Resolved!`);
-      loadProfile();
-    } catch (err: any) {
-      toast.error('Failed to resolve ticket.');
-    }
-  };
-
-  // Quick toggle task completed
-  const handleToggleTaskStatus = async (task: any) => {
-    const nextStatus = task.status === 'Completed' ? 'Pending' : 'Completed';
-    try {
-      await api.put(`/api/tasks/${task.id}`, {
-        status: nextStatus,
-      });
-      toast.success(`Task marked as ${nextStatus}!`);
-      loadProfile();
-    } catch (err: any) {
-      toast.error('Failed to update task status.');
-    }
-  };
-
   // Generic deletion handler
   const handleDeleteConfirm = async () => {
     if (!deleteConfirm) return;
@@ -153,15 +108,6 @@ export const CustomerProfile: React.FC = () => {
       if (deleteConfirm.type === 'esim') {
         await api.delete(`/api/esims/${deleteConfirm.id}`);
         toast.success('eSIM cancelled and removed.');
-      } else if (deleteConfirm.type === 'transaction') {
-        await api.delete(`/api/transactions/${deleteConfirm.id}`);
-        toast.success('Transaction removed from ledger.');
-      } else if (deleteConfirm.type === 'support') {
-        await api.delete(`/api/support/${deleteConfirm.id}`);
-        toast.success('Support ticket deleted.');
-      } else if (deleteConfirm.type === 'task') {
-        await api.delete(`/api/tasks/${deleteConfirm.id}`);
-        toast.success('Task deleted.');
       } else if (deleteConfirm.type === 'note') {
         await api.delete(`/api/notes/${deleteConfirm.id}`);
         toast.success('Note deleted.');
@@ -191,18 +137,11 @@ export const CustomerProfile: React.FC = () => {
     );
   }
 
-  const { customer, esims, transactions, support_tickets, interactions, tasks, notes, timeline, referred_customers } = data;
-
-  // Calculate dynamic lifetime metrics from transactions
-  const totalSpent = (transactions || []).reduce((acc: number, t: any) => acc + (t.payment_status === 'Paid' ? (Number(t.selling_price) || 0) : 0), 0);
-  const totalProfit = (transactions || []).reduce((acc: number, t: any) => acc + (t.payment_status === 'Paid' ? (Number(t.profit) || (Number(t.selling_price) - Number(t.cost_price))) : 0), 0);
+  const { customer, esims, interactions, notes, timeline, referred_customers } = data;
 
   const tabs = [
     { id: 'esims', label: `eSIMs (${esims?.length || 0})`, icon: SimCard },
-    { id: 'transactions', label: `Transactions (${transactions?.length || 0})`, icon: Receipt },
-    { id: 'support', label: `Support (${support_tickets?.length || 0})`, icon: HelpCircle },
     { id: 'interactions', label: `Contact History (${interactions?.length || 0})`, icon: MessageSquare },
-    { id: 'tasks', label: `Tasks (${tasks?.length || 0})`, icon: CheckSquare },
     { id: 'notes', label: `Internal Notes (${notes?.length || 0})`, icon: FileText },
     { id: 'timeline', label: `Activity Timeline (${timeline?.length || 0})`, icon: Clock },
     ...(referred_customers?.length > 0
@@ -298,37 +237,6 @@ export const CustomerProfile: React.FC = () => {
               Add eSIM
             </Button>
 
-            {/* Record Payment */}
-            <Button
-              variant="secondary"
-              size="sm"
-              leftIcon={<DollarSign className="w-3.5 h-3.5 text-emerald-600" />}
-              onClick={() => setIsAddTransactionOpen(true)}
-              className="font-bold border-slate-300"
-            >
-              Payment
-            </Button>
-
-            {/* Add Support */}
-            <Button
-              variant="secondary"
-              size="sm"
-              leftIcon={<HelpCircle className="w-3.5 h-3.5 text-rose-500" />}
-              onClick={() => setIsAddSupportOpen(true)}
-            >
-              Ticket
-            </Button>
-
-            {/* Add Task */}
-            <Button
-              variant="secondary"
-              size="sm"
-              leftIcon={<CheckSquare className="w-3.5 h-3.5 text-purple-600" />}
-              onClick={() => setIsAddTaskOpen(true)}
-            >
-              Task
-            </Button>
-
             {/* Add Note */}
             <Button
               variant="secondary"
@@ -389,11 +297,10 @@ export const CustomerProfile: React.FC = () => {
             </div>
           </div>
 
-          {/* Total Spent in PKR */}
           <div className="p-3 bg-emerald-50/60 rounded-2xl border border-emerald-100">
-            <span className="text-[10px] font-bold uppercase text-emerald-800 block mb-0.5">Lifetime Purchases</span>
+            <span className="text-[10px] font-bold uppercase text-emerald-800 block mb-0.5">Attached eSIMs</span>
             <span className="font-bold text-emerald-900 text-sm">
-              {formatPrice(totalSpent)}
+              {esims?.length || 0}
             </span>
           </div>
 
@@ -612,265 +519,16 @@ export const CustomerProfile: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 2: PURCHASE HISTORY / TRANSACTIONS */}
-      {activeTab === 'transactions' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-base font-bold text-slate-900">
-                Purchase & Payment History ({transactions?.length || 0})
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Every purchase, renewal, and package change with profit margins
-              </p>
-            </div>
-            <Button
-              variant="primary"
-              size="sm"
-              leftIcon={<Plus className="w-4 h-4" />}
-              onClick={() => {
-                setEditingTransaction(null);
-                setIsAddTransactionOpen(true);
-              }}
-            >
-              Record Payment
-            </Button>
-          </div>
-
-          {transactions?.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-12 text-center text-slate-400 text-xs space-y-3">
-              <Receipt className="w-10 h-10 text-slate-300 mx-auto" />
-              <p className="font-semibold text-slate-700">No transactions recorded yet for {customer.full_name}.</p>
-              <Button
-                size="sm"
-                variant="primary"
-                leftIcon={<Plus className="w-4 h-4" />}
-                onClick={() => setIsAddTransactionOpen(true)}
-              >
-                Record First Payment
-              </Button>
-            </div>
-          ) : (
-            <div className="overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-card">
-              <table className="w-full text-left text-xs">
-                <thead className="border-b border-slate-100 bg-slate-50/75 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  <tr>
-                    <th className="px-5 py-3.5">Transaction ID</th>
-                    <th className="px-4 py-3.5">Type & Package</th>
-                    <th className="px-4 py-3.5">Selling Price</th>
-                    <th className="px-4 py-3.5">Cost / Profit</th>
-                    <th className="px-4 py-3.5">Method & Status</th>
-                    <th className="px-4 py-3.5">Date & Staff</th>
-                    <th className="px-5 py-3.5 text-right">Actions (Edit / Remove)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-700">
-                  {transactions.map((t: any) => (
-                    <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="px-5 py-3.5 font-mono font-bold text-slate-900">
-                        {t.id}
-                        {t.reference_id && (
-                          <div className="text-[10px] text-slate-400 font-normal">Ref: {t.reference_id}</div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <div className="font-bold text-slate-900">{t.transaction_type}</div>
-                        <div className="text-[11px] text-slate-500">
-                          {t.package_name || 'eSIM'} {t.data_allowance ? `(${t.data_allowance})` : ''}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3.5 font-bold text-slate-900">
-                        {formatPrice(t.selling_price)}
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <div className="text-slate-500">Cost: {formatPrice(t.cost_price)}</div>
-                        <div className="font-semibold text-emerald-700">Profit: +{formatPrice(t.profit)}</div>
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <div className="font-semibold text-slate-800">{t.payment_method}</div>
-                        {getStatusBadge(t.payment_status)}
-                      </td>
-                      <td className="px-4 py-3.5 text-slate-500">
-                        <div>{formatDate(t.date, true)}</div>
-                        <div className="text-[11px] text-slate-400">By: {t.staff_name || 'Staff'}</div>
-                      </td>
-                      <td className="px-5 py-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {/* Edit Transaction */}
-                          <Button
-                            variant="secondary"
-                            size="xs"
-                            leftIcon={<Edit2 className="w-3 h-3 text-emerald-600" />}
-                            onClick={() => {
-                              setEditingTransaction(t);
-                              setIsAddTransactionOpen(true);
-                            }}
-                          >
-                            Edit
-                          </Button>
-                          <button
-                            onClick={() =>
-                              setDeleteConfirm({
-                                type: 'transaction',
-                                id: t.id,
-                                name: `${t.transaction_type} (${formatPrice(t.selling_price)})`,
-                              })
-                            }
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                            title="Delete Transaction"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB 3: SUPPORT TICKETS */}
-      {activeTab === 'support' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-base font-bold text-slate-900">
-                Support History & Requests ({support_tickets?.length || 0})
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Technical inquiries, APN guidance, and customer issue tracking
-              </p>
-            </div>
-            <Button
-              variant="primary"
-              size="sm"
-              leftIcon={<Plus className="w-4 h-4" />}
-              onClick={() => {
-                setEditingSupport(null);
-                setIsAddSupportOpen(true);
-              }}
-            >
-              Open Support Ticket
-            </Button>
-          </div>
-
-          {support_tickets?.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-12 text-center text-slate-400 text-xs space-y-3">
-              <HelpCircle className="w-10 h-10 text-slate-300 mx-auto" />
-              <p className="font-semibold text-slate-700">No support tickets logged for {customer.full_name}.</p>
-              <Button
-                size="sm"
-                variant="primary"
-                leftIcon={<Plus className="w-4 h-4" />}
-                onClick={() => setIsAddSupportOpen(true)}
-              >
-                Create First Ticket
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {support_tickets.map((s: any) => (
-                <div
-                  key={s.id}
-                  className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-card space-y-3"
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
-                    <div className="flex items-center gap-2.5">
-                      <span className="font-mono font-bold text-xs text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
-                        #{s.id}
-                      </span>
-                      <h4 className="text-sm font-bold text-slate-900">{s.issue_type}</h4>
-                      {getStatusBadge(s.priority)}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {getStatusBadge(s.status)}
-                      {s.status !== 'Resolved' && s.status !== 'Closed' && (
-                        <Button
-                          variant="success"
-                          size="xs"
-                          leftIcon={<Check className="w-3 h-3" />}
-                          onClick={() => handleQuickResolveTicket(s)}
-                        >
-                          Quick Resolve
-                        </Button>
-                      )}
-                      <Button
-                        variant="secondary"
-                        size="xs"
-                        leftIcon={<Edit2 className="w-3 h-3 text-emerald-600" />}
-                        onClick={() => {
-                          setEditingSupport(s);
-                          setIsAddSupportOpen(true);
-                        }}
-                      >
-                        Edit / Update
-                      </Button>
-                      <button
-                        onClick={() =>
-                          setDeleteConfirm({
-                            type: 'support',
-                            id: s.id,
-                            name: `Ticket #${s.id}`,
-                          })
-                        }
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-slate-700 leading-relaxed">{s.description}</p>
-
-                  {s.resolution && (
-                    <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-900">
-                      <span className="font-bold">Resolution: </span>
-                      {s.resolution}
-                      {s.resolved_date && (
-                        <span className="text-[10px] text-emerald-700 block mt-0.5">
-                          Resolved on {formatDate(s.resolved_date, true)}
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-400 pt-1">
-                    <span>Created: {formatDate(s.created_at, true)}</span>
-                    <span>Assigned: {s.assigned_staff_name || 'Unassigned'}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB 4: CONTACT HISTORY / INTERACTIONS */}
       {activeTab === 'interactions' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-base font-bold text-slate-900">
-                Customer Contact History ({interactions?.length || 0})
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Logged WhatsApp chats, phone calls, and communication outcomes
-              </p>
-            </div>
-            <Button
-              variant="primary"
-              size="sm"
-              leftIcon={<Plus className="w-4 h-4" />}
-              onClick={() => setIsAddInteractionOpen(true)}
-            >
+            <h3 className="text-base font-bold text-slate-900">
+              Customer Contact History ({interactions?.length || 0})
+            </h3>
+            <Button variant="primary" size="sm" leftIcon={<Plus className="w-4 h-4" />} onClick={() => setIsAddInteractionOpen(true)}>
               Log Interaction
             </Button>
           </div>
-
           {interactions?.length === 0 ? (
             <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-12 text-center text-slate-400 text-xs space-y-3">
               <MessageSquare className="w-10 h-10 text-slate-300 mx-auto" />
@@ -882,10 +540,7 @@ export const CustomerProfile: React.FC = () => {
           ) : (
             <div className="space-y-3">
               {interactions.map((item: any) => (
-                <div
-                  key={item.id}
-                  className="p-4 rounded-2xl border border-slate-200/90 bg-white shadow-card space-y-2"
-                >
+                <div key={item.id} className="p-4 rounded-2xl border border-slate-200/90 bg-white shadow-card space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-sky-50 text-sky-800 border border-sky-200">
@@ -893,16 +548,9 @@ export const CustomerProfile: React.FC = () => {
                       </span>
                       <span className="text-xs font-bold text-slate-900">{item.purpose || 'General Contact'}</span>
                     </div>
-
-                    <span className="text-[11px] font-mono text-slate-400">
-                      {formatDate(item.interaction_date, true)}
-                    </span>
+                    <span className="text-[11px] font-mono text-slate-400">{formatDate(item.interaction_date, true)}</span>
                   </div>
-
-                  <p className="text-xs text-slate-700 leading-relaxed bg-slate-50/70 p-3 rounded-xl border border-slate-100">
-                    {item.notes}
-                  </p>
-
+                  <p className="text-xs text-slate-700 leading-relaxed bg-slate-50/70 p-3 rounded-xl border border-slate-100">{item.notes}</p>
                   <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
                     <div>
                       {item.outcome && (
@@ -915,110 +563,6 @@ export const CustomerProfile: React.FC = () => {
                   </div>
                 </div>
               ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB 5: TASKS / FOLLOW-UPS */}
-      {activeTab === 'tasks' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-base font-bold text-slate-900">
-                Customer Tasks & Follow-ups ({tasks?.length || 0})
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Scheduled reminders, renewal calls, and action items
-              </p>
-            </div>
-            <Button
-              variant="primary"
-              size="sm"
-              leftIcon={<Plus className="w-4 h-4" />}
-              onClick={() => {
-                setEditingTask(null);
-                setIsAddTaskOpen(true);
-              }}
-            >
-              Add Task
-            </Button>
-          </div>
-
-          {tasks?.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-12 text-center text-slate-400 text-xs space-y-3">
-              <CheckSquare className="w-10 h-10 text-slate-300 mx-auto" />
-              <p className="font-semibold text-slate-700">No tasks scheduled for {customer.full_name}.</p>
-              <Button size="sm" onClick={() => setIsAddTaskOpen(true)}>
-                Schedule Follow-up Reminder
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {tasks.map((t: any) => {
-                const isDone = t.status === 'Completed';
-                return (
-                  <div
-                    key={t.id}
-                    className={`p-4 rounded-2xl border transition-all flex items-start justify-between gap-4 ${
-                      isDone
-                        ? 'bg-slate-50 border-slate-200 opacity-70'
-                        : 'bg-white border-slate-200 shadow-card'
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <input
-                        type="checkbox"
-                        checked={isDone}
-                        onChange={() => handleToggleTaskStatus(t)}
-                        className="w-5 h-5 mt-0.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                        title="Click to toggle completed"
-                      />
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs font-bold ${isDone ? 'line-through text-slate-500' : 'text-slate-900'}`}>
-                            {t.task_type}
-                          </span>
-                          {getStatusBadge(t.priority)}
-                          {getStatusBadge(t.status)}
-                        </div>
-                        <p className="text-xs text-slate-600 mt-1">{t.notes}</p>
-                        <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-3 font-mono">
-                          <span>Due: {t.due_date} {t.due_time || ''}</span>
-                          <span>Assigned: {t.assigned_staff_name || 'Staff'}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {/* Edit Task Button */}
-                      <Button
-                        variant="secondary"
-                        size="xs"
-                        leftIcon={<Edit2 className="w-3 h-3 text-emerald-600" />}
-                        onClick={() => {
-                          setEditingTask(t);
-                          setIsAddTaskOpen(true);
-                        }}
-                      >
-                        Edit
-                      </Button>
-                      <button
-                        onClick={() =>
-                          setDeleteConfirm({
-                            type: 'task',
-                            id: t.id,
-                            name: `${t.task_type}`,
-                          })
-                        }
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
             </div>
           )}
         </div>
@@ -1233,38 +777,6 @@ export const CustomerProfile: React.FC = () => {
         />
       )}
 
-      {/* Record / Edit Transaction Modal */}
-      {isAddTransactionOpen && (
-        <TransactionFormModal
-          isOpen={isAddTransactionOpen}
-          onClose={() => {
-            setIsAddTransactionOpen(false);
-            setEditingTransaction(null);
-          }}
-          customerId={customer.id}
-          customerName={customer.full_name}
-          customerEsims={esims}
-          transaction={editingTransaction}
-          onSuccess={() => loadProfile()}
-        />
-      )}
-
-      {/* Support Ticket Modal (Create / Edit) */}
-      {isAddSupportOpen && (
-        <SupportTicketModal
-          isOpen={isAddSupportOpen}
-          onClose={() => {
-            setIsAddSupportOpen(false);
-            setEditingSupport(null);
-          }}
-          customerId={customer.id}
-          customerName={customer.full_name}
-          customerEsims={esims}
-          ticket={editingSupport}
-          onSuccess={() => loadProfile()}
-        />
-      )}
-
       {/* Contact Interaction Modal */}
       {isAddInteractionOpen && (
         <InteractionModal
@@ -1272,22 +784,6 @@ export const CustomerProfile: React.FC = () => {
           onClose={() => setIsAddInteractionOpen(false)}
           customerId={customer.id}
           customerName={customer.full_name}
-          onSuccess={() => loadProfile()}
-        />
-      )}
-
-      {/* Task Modal (Create / Edit) */}
-      {isAddTaskOpen && (
-        <TaskFormModal
-          isOpen={isAddTaskOpen}
-          onClose={() => {
-            setIsAddTaskOpen(false);
-            setEditingTask(null);
-          }}
-          customerId={customer.id}
-          customerName={customer.full_name}
-          customerEsims={esims}
-          task={editingTask}
           onSuccess={() => loadProfile()}
         />
       )}

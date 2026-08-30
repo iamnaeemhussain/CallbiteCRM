@@ -23,7 +23,7 @@ export const RenewEsimModal: React.FC<RenewEsimModalProps> = ({
   customerName,
   onSuccess,
 }) => {
-  const { packages: contextPackages, presets, currencySymbol, formatPrice } = useSettings();
+  const { currencySymbol } = useSettings();
   const toast = useToast();
 
   const [catalogPackages, setCatalogPackages] = useState<EsimPackage[]>([]);
@@ -40,17 +40,7 @@ export const RenewEsimModal: React.FC<RenewEsimModalProps> = ({
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (isOpen) {
-      api.get('/api/packages').then((res) => {
-        if (res && res.success && res.packages) {
-          setCatalogPackages(res.packages);
-        }
-      }).catch(() => {});
-    }
-  }, [isOpen]);
-
-  const packagesList = catalogPackages.length > 0 ? catalogPackages : contextPackages;
+  const packagesList: any[] = [];
 
   useEffect(() => {
     if (esim && isOpen) {
@@ -132,18 +122,11 @@ export const RenewEsimModal: React.FC<RenewEsimModalProps> = ({
     setIsSubmitting(true);
 
     try {
-      await api.post('/api/renewals', {
-        customer_id: esim.customer_id,
-        esim_id: esim.id,
+      await api.put(`/api/esims/${esim.id}`, {
         package_name: packageName.trim(),
         data_allowance: dataAllowance.trim(),
         duration: duration.trim(),
-        new_expiry_date: newExpiryDate,
-        selling_price: parseFloat(sellingPrice),
-        cost_price: parseFloat(costPrice) || 0,
-        payment_method: paymentMethod,
-        payment_status: paymentStatus,
-        reference_id: referenceId.trim() || null,
+        expiry_date: newExpiryDate,
         notes: notes.trim() || null,
       });
 

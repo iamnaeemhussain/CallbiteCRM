@@ -25,16 +25,14 @@ settingsApp.get('/', async (c) => {
     });
 
     const tags = await db.prepare(`SELECT * FROM tags ORDER BY name ASC`).all<any>();
-    const presets = await db.prepare(`SELECT * FROM package_presets WHERE is_active = 1 ORDER BY country_region ASC, package_name ASC`).all<any>();
 
     return c.json({
       success: true,
       settings: settingsMap,
       tags: tags.results || [],
-      package_presets: presets.results || [],
     });
   } catch (err: any) {
-    return c.json({ success: true, settings: { company_name: 'Callbite Esim', currency_symbol: 'Rs.', currency_code: 'PKR', support_phone: '+923001234567' }, tags: [], package_presets: [] });
+    return c.json({ success: true, settings: { company_name: 'Callbite Esim', currency_symbol: 'Rs.', currency_code: 'PKR', support_phone: '+923001234567' }, tags: [] });
   }
 });
 
@@ -117,86 +115,6 @@ settingsApp.delete('/tags/:id', async (c) => {
   }
 });
 
-// Package Preset Management
-settingsApp.post('/presets', async (c) => {
-  try {
-    const db = c.env.DB;
-    const body = await c.req.json<{
-      id?: number;
-      country_region: string;
-      package_name: string;
-      data_allowance: string;
-      duration: string;
-      provider: string;
-      default_selling_price: number;
-      default_cost_price?: number;
-    }>();
-
-    if (!body.package_name || !body.country_region) {
-      return c.json({ success: false, error: 'Country and package name are required.' }, 400);
-    }
-
-    if (body.id) {
-      await db
-        .prepare(
-          `UPDATE package_presets SET
-            country_region = ?,
-            package_name = ?,
-            data_allowance = ?,
-            duration = ?,
-            provider = ?,
-            default_selling_price = ?,
-            default_cost_price = ?
-           WHERE id = ?`
-        )
-        .bind(
-          body.country_region.trim(),
-          body.package_name.trim(),
-          body.data_allowance || '10GB',
-          body.duration || '30 Days',
-          body.provider || 'Partner',
-          Number(body.default_selling_price || 0),
-          Number(body.default_cost_price || 0),
-          body.id
-        )
-        .run();
-    } else {
-      await db
-        .prepare(
-          `INSERT INTO package_presets (
-            country_region, package_name, data_allowance, duration,
-            provider, default_selling_price, default_cost_price, is_active
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, 1)`
-        )
-        .bind(
-          body.country_region.trim(),
-          body.package_name.trim(),
-          body.data_allowance || '10GB',
-          body.duration || '30 Days',
-          body.provider || 'Partner',
-          Number(body.default_selling_price || 0),
-          Number(body.default_cost_price || 0)
-        )
-        .run();
-    }
-
-    return c.json({ success: true, message: 'Package preset saved successfully.' });
-  } catch (err: any) {
-    return c.json({ success: false, error: 'Failed to save preset.' }, 500);
-  }
-});
-
-settingsApp.delete('/presets/:id', async (c) => {
-  try {
-    const db = c.env.DB;
-    const presetId = c.req.param('id');
-    await db.prepare(`DELETE FROM package_presets WHERE id = ?`).bind(presetId).run();
-    return c.json({ success: true, message: 'Preset deleted successfully.' });
-  } catch (err: any) {
-    return c.json({ success: false, error: 'Failed to delete preset.' }, 500);
-  }
-});
-
 // Full Database Export
 settingsApp.get('/export', async (c) => {
   try {
@@ -204,15 +122,9 @@ settingsApp.get('/export', async (c) => {
 
     const customers = await db.prepare(`SELECT * FROM customers WHERE is_deleted = 0`).all();
     const esims = await db.prepare(`SELECT * FROM esims WHERE is_deleted = 0`).all();
-    const packages = await db.prepare(`SELECT * FROM packages`).all();
-    const providers = await db.prepare(`SELECT * FROM esim_providers`).all();
-    const transactions = await db.prepare(`SELECT * FROM transactions`).all();
-    const support = await db.prepare(`SELECT * FROM support_tickets`).all();
     const interactions = await db.prepare(`SELECT * FROM interactions`).all();
-    const tasks = await db.prepare(`SELECT * FROM tasks`).all();
     const notes = await db.prepare(`SELECT * FROM notes`).all();
     const timeline = await db.prepare(`SELECT * FROM activity_timeline`).all();
-    const auditLogs = await db.prepare(`SELECT * FROM audit_logs`).all();
     const staff = await db.prepare(`SELECT id, name, email, role, phone, status, created_at, last_login_at FROM users`).all();
 
     return c.json({
@@ -221,15 +133,9 @@ settingsApp.get('/export', async (c) => {
       data: {
         customers: customers.results || [],
         esims: esims.results || [],
-        packages: packages.results || [],
-        providers: providers.results || [],
-        transactions: transactions.results || [],
-        support: support.results || [],
         interactions: interactions.results || [],
-        tasks: tasks.results || [],
         notes: notes.results || [],
         activity_timeline: timeline.results || [],
-        audit_logs: auditLogs.results || [],
         staff: staff.results || [],
       },
     });

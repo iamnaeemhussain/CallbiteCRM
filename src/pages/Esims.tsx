@@ -22,7 +22,6 @@ import { EsimFormModal } from '../components/customer/EsimFormModal';
 import { RenewEsimModal } from '../components/customer/RenewEsimModal';
 import { QRCodeModal } from '../components/common/QRCodeModal';
 import { WhatsAppModal } from '../components/common/WhatsAppModal';
-import { useSettings } from '../contexts/SettingsContext';
 import { useToast } from '../contexts/ToastContext';
 import { api } from '../utils/api';
 import { formatDate, getExpiryBadge } from '../utils/formatters';
@@ -55,7 +54,6 @@ export const Esims: React.FC = () => {
   const [deleteEsim, setDeleteEsim] = useState<any | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const { providers } = useSettings();
   const toast = useToast();
   const navigate = useNavigate();
 

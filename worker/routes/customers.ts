@@ -180,35 +180,22 @@ customersApp.get('/:id', async (c) => {
     customer.tags = (tagsRes.results || []).map((t) => t.tag_name);
 
     const esims = await db.prepare(`SELECT e.*, u.name AS created_by_staff_name FROM esims e LEFT JOIN users u ON e.created_by_staff_id = u.id WHERE e.customer_id = ? AND e.is_deleted = 0 ORDER BY e.created_at DESC`).bind(customerId).all<any>();
-    const transactions = await db.prepare(`SELECT t.*, u.name AS staff_name, e.iccid AS esim_iccid FROM transactions t LEFT JOIN users u ON t.staff_id = u.id LEFT JOIN esims e ON t.esim_id = e.id WHERE t.customer_id = ? ORDER BY t.date DESC`).bind(customerId).all<any>();
-    const supportTickets = await db.prepare(`SELECT s.*, u.name AS assigned_staff_name, cu.name AS created_by_staff_name, e.package_name AS esim_package, e.iccid AS esim_iccid FROM support_tickets s LEFT JOIN users u ON s.assigned_staff_id = u.id LEFT JOIN users cu ON s.created_by_staff_id = cu.id LEFT JOIN esims e ON s.esim_id = e.id WHERE s.customer_id = ? ORDER BY s.created_at DESC`).bind(customerId).all<any>();
     const interactions = await db.prepare(`SELECT i.*, u.name AS staff_name FROM interactions i LEFT JOIN users u ON i.staff_id = u.id WHERE i.customer_id = ? ORDER BY i.interaction_date DESC`).bind(customerId).all<any>();
-    const tasks = await db.prepare(`SELECT t.*, u.name AS assigned_staff_name, cu.name AS created_by_staff_name, e.package_name AS esim_package FROM tasks t LEFT JOIN users u ON t.assigned_staff_id = u.id LEFT JOIN users cu ON t.created_by_staff_id = cu.id LEFT JOIN esims e ON t.esim_id = e.id WHERE t.customer_id = ? ORDER BY t.status = 'Pending' DESC, t.due_date ASC`).bind(customerId).all<any>();
     const notes = await db.prepare(`SELECT n.*, u.name AS staff_name FROM notes n LEFT JOIN users u ON n.staff_id = u.id WHERE n.customer_id = ? ORDER BY n.is_pinned DESC, n.created_at DESC`).bind(customerId).all<any>();
     const timeline = await db.prepare(`SELECT a.*, u.name AS staff_name FROM activity_timeline a LEFT JOIN users u ON a.staff_id = u.id WHERE a.customer_id = ? ORDER BY a.created_at DESC`).bind(customerId).all<any>();
     const referredCustomers = await db.prepare(`SELECT c.id, c.full_name, c.whatsapp_number, c.status, c.created_at, (SELECT COUNT(*) FROM esims e WHERE e.customer_id = c.id AND e.is_deleted = 0) AS esim_count FROM customers c WHERE c.referred_by_customer_id = ? AND c.is_deleted = 0 ORDER BY c.created_at DESC`).bind(customerId).all<any>();
-
-    const totalSpent = (transactions.results || []).reduce((acc: number, t: any) => acc + (t.payment_status === 'Paid' ? (Number(t.selling_price) || 0) : 0), 0);
-    const totalProfit = (transactions.results || []).reduce((acc: number, t: any) => acc + (t.payment_status === 'Paid' ? (Number(t.profit) || (Number(t.selling_price) - Number(t.cost_price))) : 0), 0);
 
     return c.json({
       success: true,
       customer,
       esims: esims.results || [],
-      transactions: transactions.results || [],
-      support_tickets: supportTickets.results || [],
       interactions: interactions.results || [],
-      tasks: tasks.results || [],
       notes: notes.results || [],
       timeline: timeline.results || [],
       referred_customers: referredCustomers.results || [],
       metrics: {
-        total_spent: totalSpent,
-        total_profit: totalProfit,
         esim_count: (esims.results || []).length,
         active_esims: (esims.results || []).filter((e: any) => e.status === 'Active').length,
-        support_count: (supportTickets.results || []).length,
-        task_count: (tasks.results || []).filter((t: any) => t.status !== 'Completed').length,
       },
     });
   } catch (err: any) {
@@ -353,7 +340,7 @@ customersApp.post('/', async (c) => {
 
       let validEsimProviderId: string | null = null;
       if (esim.provider_id && typeof esim.provider_id === 'string' && esim.provider_id.trim()) {
-        const p = await db.prepare(`SELECT id FROM esim_providers WHERE id = ?`).bind(esim.provider_id.trim()).first<{ id: string }>();
+        const p = null as { id: string } | null; if (false) await db.prepare(`SELECT id FROM esim_providers WHERE id = ?`).bind(esim.provider_id.trim()).first<{ id: string }>();
         if (p) validEsimProviderId = p.id;
       }
       if (!validEsimProviderId && esim.provider && typeof esim.provider === 'string' && esim.provider.trim()) {
@@ -418,49 +405,6 @@ customersApp.post('/', async (c) => {
         metadata: { iccid: esim.iccid, package: esim.package_name },
       });
 
-      if (esim.selling_price !== undefined && esim.selling_price > 0) {
-        const txnId = await generateId(db, 'transactions', 'TXN', 3001);
-        const sell = Number(esim.selling_price || 0);
-        const cost = Number(esim.cost_price || 0);
-        const profit = sell - cost;
-
-        await db
-          .prepare(
-            `INSERT INTO transactions (
-              id, customer_id, esim_id, transaction_type, package_name,
-              data_allowance, duration, date, selling_price, cost_price,
-              profit, currency, payment_method, payment_status, staff_id,
-              notes, created_at, updated_at
-            ) VALUES (?, ?, ?, 'New eSIM', ?, ?, ?, ?, ?, ?, ?, 'PKR', ?, 'Paid', ?, ?, ?, ?)`
-          )
-          .bind(
-            txnId,
-            customerId,
-            esimId,
-            esim.package_name,
-            esim.data_allowance,
-            esim.duration,
-            now,
-            sell,
-            cost,
-            profit,
-            esim.payment_method || 'Easypaisa',
-            validStaffId,
-            'Initial purchase recorded upon customer creation',
-            now,
-            now
-          )
-          .run();
-
-        await logTimeline(db, {
-          customer_id: customerId,
-          staff_id: validStaffId,
-          action_type: 'TRANSACTION_RECORDED',
-          title: `Purchase Recorded (Rs. ${sell.toLocaleString()})`,
-          description: `Initial eSIM purchase recorded via ${esim.payment_method || 'Easypaisa'}.`,
-          metadata: { amount: sell, method: esim.payment_method },
-        });
-      }
     }
 
     return c.json({

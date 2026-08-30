@@ -20,11 +20,11 @@ import { useToast } from '../contexts/ToastContext';
 import { api } from '../utils/api';
 
 export const Settings: React.FC = () => {
-  const { settings, tags, presets, refreshSettings } = useSettings();
+  const { settings, tags, refreshSettings, currencySymbol } = useSettings();
   const { isAdmin } = useAuth();
   const toast = useToast();
 
-  const [activeSubTab, setActiveSubTab] = useState<'general' | 'templates' | 'presets' | 'tags' | 'backup'>('general');
+  const [activeSubTab, setActiveSubTab] = useState<'general' | 'templates' | 'tags' | 'backup'>('general');
 
   // Form states for general settings & templates
   const [companyName, setCompanyName] = useState('');
@@ -87,43 +87,6 @@ export const Settings: React.FC = () => {
       toast.error(err.message || 'Failed to update settings.');
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  const handleSavePreset = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!presetName.trim() || !presetRegion.trim()) {
-      toast.error('Country/Region and Package Name are required.');
-      return;
-    }
-
-    try {
-      await api.post('/api/settings/presets', {
-        id: editingPreset?.id,
-        country_region: presetRegion.trim(),
-        package_name: presetName.trim(),
-        data_allowance: presetData.trim(),
-        duration: presetDuration.trim(),
-        provider: presetProvider.trim(),
-        default_selling_price: parseFloat(presetSellingPrice) || 0,
-        default_cost_price: parseFloat(presetCostPrice) || 0,
-      });
-
-      toast.success('Package preset saved!');
-      setIsPresetModalOpen(false);
-      refreshSettings();
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to save preset.');
-    }
-  };
-
-  const handleDeletePreset = async (id: number) => {
-    try {
-      await api.delete(`/api/settings/presets/${id}`);
-      toast.success('Package preset deleted.');
-      refreshSettings();
-    } catch (err: any) {
-      toast.error('Failed to delete preset.');
     }
   };
 
@@ -206,7 +169,6 @@ export const Settings: React.FC = () => {
         {[
           { id: 'general', label: 'General CRM' },
           { id: 'templates', label: 'WhatsApp Templates' },
-          { id: 'presets', label: `Package Presets (${presets.length})` },
           { id: 'tags', label: `Customer Tags (${tags.length})` },
           { id: 'backup', label: 'Database Backup & Export' },
         ].map((tab) => (
@@ -350,96 +312,6 @@ export const Settings: React.FC = () => {
         </div>
       )}
 
-      {/* SUBTAB 3: PACKAGE PRESETS */}
-      {activeSubTab === 'presets' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-bold text-slate-900">
-              eSIM Package Presets ({presets.length})
-            </h3>
-            {isAdmin && (
-              <Button
-                variant="primary"
-                size="sm"
-                leftIcon={<Plus className="w-4 h-4" />}
-                onClick={() => {
-                  setEditingPreset(null);
-                  setPresetRegion('Pakistan');
-                  setPresetName('');
-                  setPresetData('10GB');
-                  setPresetDuration('30 Days');
-                  setPresetProvider(providers.length > 0 ? providers[0].name : 'Callbite Partner');
-                  setPresetSellingPrice('4500');
-                  setPresetCostPrice('2800');
-                  setIsPresetModalOpen(true);
-                }}
-              >
-                Add Package Preset
-              </Button>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {presets.map((p) => (
-              <div
-                key={p.id}
-                className="p-5 rounded-3xl border border-slate-200/90 bg-white shadow-card flex flex-col justify-between space-y-3"
-              >
-                <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                    {p.country_region}
-                  </span>
-                  <h4 className="text-base font-black text-slate-900">{p.package_name}</h4>
-                  <div className="flex items-center gap-2 text-xs font-bold text-emerald-700 mt-1">
-                    <span>{p.data_allowance}</span>
-                    <span>•</span>
-                    <span>{p.duration}</span>
-                    <span>•</span>
-                    <span className="text-slate-500 font-normal">{p.provider}</span>
-                  </div>
-                </div>
-
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-bold text-slate-900 block">
-                      Selling: {currencySymbol} {Number(p.default_selling_price).toLocaleString()}
-                    </span>
-                    <span className="text-[11px] text-slate-400">Cost: {currencySymbol} {Number(p.default_cost_price).toLocaleString()}</span>
-                  </div>
-
-                  {isAdmin && (
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => {
-                          setEditingPreset(p);
-                          setPresetRegion(p.country_region);
-                          setPresetName(p.package_name);
-                          setPresetData(p.data_allowance);
-                          setPresetDuration(p.duration);
-                          setPresetProvider(p.provider);
-                          setPresetSellingPrice(p.default_selling_price.toString());
-                          setPresetCostPrice(p.default_cost_price.toString());
-                          setIsPresetModalOpen(true);
-                        }}
-                        className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeletePreset(p.id)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* SUBTAB 4: CUSTOMER TAGS */}
       {activeSubTab === 'tags' && (
         <div className="space-y-4">
@@ -501,7 +373,7 @@ export const Settings: React.FC = () => {
         <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-card space-y-4 max-w-2xl">
           <h3 className="text-base font-bold text-slate-900">Export Full System Database Backup</h3>
           <p className="text-xs text-slate-500 leading-relaxed">
-            Download a full JSON snapshot of all customers, eSIM records, transactions ledger, support history, interactions, tasks, notes, timeline, and audit logs.
+            Download a JSON snapshot of customers, eSIM records, interactions, notes, and timeline.
           </p>
 
           <Button
@@ -512,114 +384,6 @@ export const Settings: React.FC = () => {
             Download Database Backup (JSON)
           </Button>
         </div>
-      )}
-
-      {/* Preset Modal */}
-      {isPresetModalOpen && (
-        <Modal
-          isOpen={isPresetModalOpen}
-          onClose={() => setIsPresetModalOpen(false)}
-          title={editingPreset ? 'Edit Package Preset' : 'Add Package Preset'}
-          maxWidth="md"
-          footer={
-            <>
-              <Button variant="secondary" onClick={() => setIsPresetModalOpen(false)}>
-                Cancel
-              </Button>
-              <Button variant="primary" onClick={handleSavePreset}>
-                Save Preset
-              </Button>
-            </>
-          }
-        >
-          <form onSubmit={handleSavePreset} className="space-y-3">
-            <div>
-              <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Country / Region *</label>
-              <input
-                type="text"
-                required
-                value={presetRegion}
-                onChange={(e) => setPresetRegion(e.target.value)}
-                placeholder="e.g. Turkey, UAE"
-                className="w-full text-sm rounded-xl border border-slate-300 px-3 py-1.5"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Package Name *</label>
-              <input
-                type="text"
-                required
-                value={presetName}
-                onChange={(e) => setPresetName(e.target.value)}
-                placeholder="e.g. Turkey 10GB Holiday"
-                className="w-full text-sm rounded-xl border border-slate-300 px-3 py-1.5"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Data Allowance</label>
-                <input
-                  type="text"
-                  value={presetData}
-                  onChange={(e) => setPresetData(e.target.value)}
-                  placeholder="10GB"
-                  className="w-full text-sm rounded-xl border border-slate-300 px-3 py-1.5"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Duration</label>
-                <input
-                  type="text"
-                  value={presetDuration}
-                  onChange={(e) => setPresetDuration(e.target.value)}
-                  placeholder="30 Days"
-                  className="w-full text-sm rounded-xl border border-slate-300 px-3 py-1.5"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase text-slate-600 mb-1">eSIM Provider / Supplier</label>
-              <select
-                value={presetProvider}
-                onChange={(e) => setPresetProvider(e.target.value)}
-                className="w-full text-sm rounded-xl border border-slate-300 px-3 py-1.5 bg-white"
-              >
-                {providers.map((p) => (
-                  <option key={p.id} value={p.name}>
-                    {p.name} ({p.country_coverage})
-                  </option>
-                ))}
-                <option value="Direct Carrier / Partner">Direct Carrier / Partner</option>
-              </select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Selling Price ({currencySymbol})</label>
-                <input
-                  type="number"
-                  step="1"
-                  value={presetSellingPrice}
-                  onChange={(e) => setPresetSellingPrice(e.target.value)}
-                  className="w-full text-sm rounded-xl border border-slate-300 px-3 py-1.5"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Cost Price ({currencySymbol})</label>
-                <input
-                  type="number"
-                  step="1"
-                  value={presetCostPrice}
-                  onChange={(e) => setPresetCostPrice(e.target.value)}
-                  className="w-full text-sm rounded-xl border border-slate-300 px-3 py-1.5"
-                />
-              </div>
-            </div>
-          </form>
-        </Modal>
       )}
 
       {/* Tag Modal */}

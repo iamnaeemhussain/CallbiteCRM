@@ -158,21 +158,9 @@ esimsApp.get('/:id', async (c) => {
       return c.json({ success: false, error: 'eSIM not found.' }, 404);
     }
 
-    const transactions = await db
-      .prepare(`SELECT t.*, u.name AS staff_name FROM transactions t LEFT JOIN users u ON t.staff_id = u.id WHERE t.esim_id = ? ORDER BY t.date DESC`)
-      .bind(esimId)
-      .all<any>();
-
-    const supportTickets = await db
-      .prepare(`SELECT s.*, u.name AS assigned_staff_name FROM support_tickets s LEFT JOIN users u ON s.assigned_staff_id = u.id WHERE s.esim_id = ? ORDER BY s.created_at DESC`)
-      .bind(esimId)
-      .all<any>();
-
     return c.json({
       success: true,
       esim,
-      transactions: transactions.results || [],
-      support_tickets: supportTickets.results || [],
     });
   } catch (err: any) {
     return c.json({ success: false, error: 'Failed to load eSIM.' }, 500);
@@ -236,47 +224,8 @@ esimsApp.post('/', async (c) => {
       return c.json({ success: false, error: 'Target customer does not exist.' }, 404);
     }
 
-    // Safe Foreign Key resolution for provider_id
-    let validProviderId: string | null = null;
-    if (body.provider_id && typeof body.provider_id === 'string' && body.provider_id.trim()) {
-      const p = await db
-        .prepare(`SELECT id FROM esim_providers WHERE id = ?`)
-        .bind(body.provider_id.trim())
-        .first<{ id: string }>();
-      if (p) {
-        validProviderId = p.id;
-      }
-    }
-    if (!validProviderId && body.provider && typeof body.provider === 'string' && body.provider.trim()) {
-      const p = await db
-        .prepare(`SELECT id FROM esim_providers WHERE name = ?`)
-        .bind(body.provider.trim())
-        .first<{ id: string }>();
-      if (p) {
-        validProviderId = p.id;
-      }
-    }
-
-    // Safe Foreign Key resolution for package_id
-    let validPackageId: string | null = null;
-    if (body.package_id && typeof body.package_id === 'string' && body.package_id.trim()) {
-      const pkg = await db
-        .prepare(`SELECT id FROM packages WHERE id = ?`)
-        .bind(body.package_id.trim())
-        .first<{ id: string }>();
-      if (pkg) {
-        validPackageId = pkg.id;
-      }
-    }
-    if (!validPackageId && body.package_name && typeof body.package_name === 'string' && body.package_name.trim()) {
-      const pkg = await db
-        .prepare(`SELECT id FROM packages WHERE package_name = ?`)
-        .bind(body.package_name.trim())
-        .first<{ id: string }>();
-      if (pkg) {
-        validPackageId = pkg.id;
-      }
-    }
+    const validProviderId: string | null = null;
+    const validPackageId: string | null = null;
 
     // Safe Foreign Key resolution for staff_id
     let validStaffId: string | null = null;
@@ -348,51 +297,6 @@ esimsApp.post('/', async (c) => {
       ip_address: clientIp,
     });
 
-    // Optional initial purchase recording in PKR
-    if (body.record_transaction && body.selling_price !== undefined && body.selling_price >= 0) {
-      const txnId = await generateId(db, 'transactions', 'TXN', 3001);
-      const sell = Number(body.selling_price || 0);
-      const cost = Number(body.cost_price || 0);
-      const profit = sell - cost;
-
-      await db
-        .prepare(
-          `INSERT INTO transactions (
-            id, customer_id, esim_id, transaction_type, package_name,
-            data_allowance, duration, date, selling_price, cost_price,
-            profit, currency, payment_method, payment_status, staff_id,
-            notes, created_at, updated_at
-          ) VALUES (?, ?, ?, 'New eSIM', ?, ?, ?, ?, ?, ?, ?, 'PKR', ?, 'Paid', ?, ?, ?, ?)`
-        )
-        .bind(
-          txnId,
-          body.customer_id,
-          esimId,
-          body.package_name,
-          body.data_allowance,
-          body.duration,
-          now,
-          sell,
-          cost,
-          profit,
-          body.payment_method || 'Easypaisa',
-          validStaffId,
-          'Purchase recorded upon adding eSIM',
-          now,
-          now
-        )
-        .run();
-
-      await logTimeline(db, {
-        customer_id: body.customer_id,
-        staff_id: validStaffId,
-        action_type: 'TRANSACTION_RECORDED',
-        title: `Purchase Recorded (Rs. ${sell.toLocaleString()})`,
-        description: `Payment recorded via ${body.payment_method || 'Easypaisa'} for ${body.package_name}.`,
-        metadata: { amount: sell, method: body.payment_method, txn_id: txnId },
-      });
-    }
-
     return c.json({
       success: true,
       message: 'eSIM added successfully.',
@@ -403,6 +307,7 @@ esimsApp.post('/', async (c) => {
     return c.json({ success: false, error: err.message || 'Failed to create eSIM.' }, 500);
   }
 });
+
 
 // Update eSIM
 esimsApp.put('/:id', async (c) => {
@@ -451,55 +356,15 @@ esimsApp.put('/:id', async (c) => {
       changes.push(`Tag: ${existing.tag || 'None'} → ${body.tag}`);
     }
 
-    // Safe Foreign Key resolution for provider_id
-    let validProviderId = existing.provider_id;
-    if (body.provider_id !== undefined) {
-      if (body.provider_id && typeof body.provider_id === 'string' && body.provider_id.trim()) {
-        const p = await db
-          .prepare(`SELECT id FROM esim_providers WHERE id = ?`)
-          .bind(body.provider_id.trim())
-          .first<{ id: string }>();
-        validProviderId = p ? p.id : null;
-      } else {
-        validProviderId = null;
-      }
-    } else if (body.provider && body.provider !== existing.provider) {
-      const p = await db
-        .prepare(`SELECT id FROM esim_providers WHERE name = ?`)
-        .bind(body.provider.trim())
-        .first<{ id: string }>();
-      validProviderId = p ? p.id : null;
-    }
-
-    // Safe Foreign Key resolution for package_id
-    let validPackageId = existing.package_id;
-    if (body.package_id !== undefined) {
-      if (body.package_id && typeof body.package_id === 'string' && body.package_id.trim()) {
-        const pkg = await db
-          .prepare(`SELECT id FROM packages WHERE id = ?`)
-          .bind(body.package_id.trim())
-          .first<{ id: string }>();
-        validPackageId = pkg ? pkg.id : null;
-      } else {
-        validPackageId = null;
-      }
-    } else if (body.package_name && body.package_name !== existing.package_name) {
-      const pkg = await db
-        .prepare(`SELECT id FROM packages WHERE package_name = ?`)
-        .bind(body.package_name.trim())
-        .first<{ id: string }>();
-      validPackageId = pkg ? pkg.id : null;
-    }
-
     await db
       .prepare(
         `UPDATE esims SET
           iccid = ?,
           country_region = ?,
           provider = ?,
-          provider_id = ?,
+          provider_id = NULL,
           package_name = ?,
-          package_id = ?,
+          package_id = NULL,
           data_allowance = ?,
           duration = ?,
           start_date = ?,
@@ -518,9 +383,7 @@ esimsApp.put('/:id', async (c) => {
         body.iccid !== undefined ? body.iccid.trim() : existing.iccid,
         body.country_region !== undefined ? body.country_region : existing.country_region,
         body.provider !== undefined ? body.provider : existing.provider,
-        validProviderId,
         body.package_name !== undefined ? body.package_name.trim() : existing.package_name,
-        validPackageId,
         body.data_allowance !== undefined ? body.data_allowance : existing.data_allowance,
         body.duration !== undefined ? body.duration : existing.duration,
         body.start_date !== undefined ? body.start_date : existing.start_date,

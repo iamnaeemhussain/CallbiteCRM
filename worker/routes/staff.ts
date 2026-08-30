@@ -55,15 +55,10 @@ staffApp.get('/:id', async (c) => {
       return c.json({ success: false, error: 'Staff member not found.' }, 404);
     }
 
-    const recentAuditLogs = await db
-      .prepare(`SELECT * FROM audit_logs WHERE staff_id = ? ORDER BY created_at DESC LIMIT 20`)
-      .bind(staffId)
-      .all<any>();
-
     return c.json({
       success: true,
       staff,
-      recent_logs: recentAuditLogs.results || [],
+      recent_logs: [],
     });
   } catch (err: any) {
     return c.json({ success: false, error: 'Failed to load staff details.' }, 500);

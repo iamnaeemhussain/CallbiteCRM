@@ -21,7 +21,9 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
   customer,
   onSuccess,
 }) => {
-  const { tags: availableTags, staffList, presets, packages: contextPackages, providers, currencySymbol, formatPrice } = useSettings();
+  const { tags: availableTags, staffList, currencySymbol } = useSettings();
+  const presets: any[] = [];
+  const contextPackages: any[] = [];
   const { user } = useAuth();
   const toast = useToast();
 
@@ -74,11 +76,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
         }
       }).catch(() => {});
 
-      api.get('/api/packages').then((res) => {
-        if (res.success && res.packages) {
-          setCatalogPackages(res.packages);
-        }
-      }).catch(() => {});
+
     }
   }, [isOpen]);
 
