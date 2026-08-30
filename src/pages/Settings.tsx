@@ -28,7 +28,7 @@ export const Settings: React.FC = () => {
 
   // Form states for general settings & templates
   const [companyName, setCompanyName] = useState('');
-  const [currencySymbol, setCurrencySymbol] = useState('Rs.');
+  const [currencySymbolInput, setCurrencySymbolInput] = useState('Rs.');
   const [currencyCode, setCurrencyCode] = useState('PKR');
   const [supportPhone, setSupportPhone] = useState('');
   const [waRenewal, setWaRenewal] = useState('');
@@ -58,7 +58,7 @@ export const Settings: React.FC = () => {
   useEffect(() => {
     if (settings) {
       setCompanyName(settings.company_name || 'Callbite Esim');
-      setCurrencySymbol(settings.currency_symbol || 'Rs.');
+      setCurrencySymbolInput(settings.currency_symbol || 'Rs.');
       setCurrencyCode(settings.currency_code || 'PKR');
       setSupportPhone(settings.support_phone || '+923001234567');
       setWaRenewal(settings.wa_template_renewal || '');
@@ -73,7 +73,7 @@ export const Settings: React.FC = () => {
     try {
       await api.put('/api/settings', {
         company_name: companyName.trim(),
-        currency_symbol: currencySymbol.trim(),
+        currency_symbol: currencySymbolInput.trim(),
         currency_code: currencyCode.trim(),
         support_phone: supportPhone.trim(),
         wa_template_renewal: waRenewal.trim(),
