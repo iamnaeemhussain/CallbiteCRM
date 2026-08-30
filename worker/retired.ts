@@ -4,7 +4,6 @@ const RETIRED_TABLES = [
   'tasks',
   'audit_logs',
   'package_presets',
-  'packages',
   'esim_providers',
 ];
 

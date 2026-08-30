@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   Users,
   CardSim as SimCard,
+  Package,
   UserCheck,
   Settings,
   Share2,

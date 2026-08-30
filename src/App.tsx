@@ -11,6 +11,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Customers } from './pages/Customers';
 import { CustomerProfile } from './pages/CustomerProfile';
 import { Esims } from './pages/Esims';
+import { Packages } from './pages/Packages';
 import { Referrals } from './pages/Referrals';
 import { Staff } from './pages/Staff';
 import { Settings } from './pages/Settings';
@@ -51,6 +52,7 @@ export function App() {
                 <Route path="customers" element={<Customers />} />
                 <Route path="customers/:id" element={<CustomerProfile />} />
                 <Route path="esims" element={<Esims />} />
+                <Route path="packages" element={<Packages />} />
                 <Route path="referrals" element={<Referrals />} />
                 <Route path="staff" element={<Staff />} />
                 <Route path="esim-api-box" element={<EsimApiBox />} />

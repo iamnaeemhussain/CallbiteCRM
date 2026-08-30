@@ -46,6 +46,9 @@ async function ensureYesimTables(db: D1Database) {
     `ALTER TABLE esims ADD COLUMN data_left_mb REAL`,
     `ALTER TABLE esims ADD COLUMN data_package_mb REAL`,
     `ALTER TABLE esims ADD COLUMN data_used_mb REAL`,
+    `ALTER TABLE esims ADD COLUMN ios_tap_link TEXT`,
+    `ALTER TABLE esims ADD COLUMN esim_passport_url TEXT`,
+    `ALTER TABLE yesim_profiles ADD COLUMN esim_passport_url TEXT`,
   ]) {
     try {
       await db.prepare(sql).run();
@@ -53,6 +56,12 @@ async function ensureYesimTables(db: D1Database) {
       // column already exists
     }
   }
+  await db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS pakistan_plans (id TEXT PRIMARY KEY, yesim_plan_id TEXT, old_id TEXT, name TEXT NOT NULL, data_amount TEXT, data_unit TEXT, days INTEGER, countries_included TEXT, operators TEXT, apn TEXT, wholesale_price REAL, currency TEXT, cost_price_pkr REAL, selling_price_pkr REAL, raw_json TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`
+    )
+    .run();
+  await db.prepare(`CREATE INDEX IF NOT EXISTS idx_pakistan_plans_old ON pakistan_plans(old_id)`).run();
 }
 
 function toDateStr(value?: string | null): string | null {
@@ -132,7 +141,15 @@ async function syncEsimInventory(
   const start = toDateStr(profile.created_at) || now.slice(0, 10);
   const activation = toDateStr(profile.plan_activated_at) || start;
   const status = mapYesimStatus(profile, expiry);
-  const qr = profile.qrcode || (typeof profile.img === 'string' && String(profile.img).startsWith('data:') ? profile.img : null);
+  const qr = profile.qrcode || profile.activation_code || (typeof profile.img === 'string' && String(profile.img).startsWith('data:') ? profile.img : null);
+  const iosTap = profile.ios_tap_link || profile.ios_link || null;
+  const passport =
+    profile.esim_passport ||
+    profile.esimpass ||
+    profile.esim_pass ||
+    profile.passport_url ||
+    profile.esim_passport_url ||
+    null;
   const left = profile.data_left_mb != null ? Number(profile.data_left_mb) : null;
   const pack = profile.data_package_mb != null ? Number(profile.data_package_mb) : null;
   const used = profile.data_used_mb != null ? Number(profile.data_used_mb) : null;
@@ -147,9 +164,9 @@ async function syncEsimInventory(
   if (existing) {
     await db
       .prepare(
-        `UPDATE esims SET expiry_date = ?, activation_date = COALESCE(?, activation_date), start_date = COALESCE(start_date, ?), status = ?, qr_code_data = COALESCE(?, qr_code_data), data_allowance = ?, duration = ?, package_name = ?, provider = CASE WHEN provider IS NULL OR provider = '' THEN 'Yesim' ELSE provider END, data_left_mb = ?, data_package_mb = ?, data_used_mb = ?, notes = CASE WHEN notes IS NULL OR notes = '' THEN ? ELSE notes END, is_deleted = 0, updated_at = ? WHERE iccid = ?`
+        `UPDATE esims SET expiry_date = ?, activation_date = COALESCE(?, activation_date), start_date = COALESCE(start_date, ?), status = ?, qr_code_data = COALESCE(?, qr_code_data), data_allowance = ?, duration = ?, package_name = ?, provider = CASE WHEN provider IS NULL OR provider = '' THEN 'Yesim' ELSE provider END, data_left_mb = ?, data_package_mb = ?, data_used_mb = ?, ios_tap_link = COALESCE(?, ios_tap_link), esim_passport_url = COALESCE(?, esim_passport_url), notes = CASE WHEN notes IS NULL OR notes = '' THEN ? ELSE notes END, is_deleted = 0, updated_at = ? WHERE iccid = ?`
       )
-      .bind(expiry || existing.expiry_date, activation, start, status, qr, allowance || existing.data_allowance, duration || existing.duration, planLabel || existing.package_name, left, pack, used, note || null, now, iccid)
+      .bind(expiry || existing.expiry_date, activation, start, status, qr, allowance || existing.data_allowance, duration || existing.duration, planLabel || existing.package_name, left, pack, used, iosTap, passport, note || null, now, iccid)
       .run();
     return { action: 'updated', esim_id: existing.id, iccid, customer_id: existing.customer_id };
   }
@@ -607,6 +624,143 @@ yesimApp.get('/plans', async (c) => {
   }
 
   return c.json({ success: true, count: plans.length, plans });
+});
+
+function isPakistanPlan(p: any): boolean {
+  const iso = String(p?.countryIso2 || p?.iso2 || p?.iso3 || '').toUpperCase();
+  if (iso === 'PK' || iso === 'PAK') return true;
+  const hay = [p?.name, p?.countries_included, p?.country, p?.countries, p?.operators, p?.plan_type]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  return /\bpakistan\b|\bpak\b/.test(hay) || /(^|[^a-z])pk([^a-z]|$)/.test(hay);
+}
+
+yesimApp.post('/sync-pakistan-plans', async (c) => {
+  const db = c.env.DB;
+  await ensureYesimTables(db);
+  const result = await callYesim(db, c.get('user'), {
+    action: 'PLANS_PAKISTAN',
+    method: 'GET',
+    path: '/plans',
+  });
+  if (!result.ok) return jsonFail(c, result);
+
+  let plans = Array.isArray(result.data) ? result.data : result.data?.plans || result.data?.data || [];
+  if (!Array.isArray(plans)) plans = [];
+  plans = plans.filter(isPakistanPlan);
+
+  const eurToPkr = Number((await getSetting(db, 'yesim_eur_to_pkr')) || 310) || 310;
+  const now = new Date().toISOString();
+  let saved = 0;
+
+  for (const p of plans) {
+    const yesimPlanId = p.id != null ? String(p.id) : '';
+    const oldId = p.old_id != null ? String(p.old_id) : '';
+    const rowId = oldId || yesimPlanId || `PLN-${saved + 1}`;
+    const wholesale = Number(p.price || 0);
+    const costPkr = Math.round(wholesale * eurToPkr);
+    const sellPkr = Math.round(costPkr * 1.4);
+    try {
+      await db
+        .prepare(
+          `INSERT INTO pakistan_plans (id, yesim_plan_id, old_id, name, data_amount, data_unit, days, countries_included, operators, apn, wholesale_price, currency, cost_price_pkr, selling_price_pkr, raw_json, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET yesim_plan_id = excluded.yesim_plan_id, old_id = excluded.old_id, name = excluded.name, data_amount = excluded.data_amount, data_unit = excluded.data_unit, days = excluded.days, countries_included = excluded.countries_included, operators = excluded.operators, apn = excluded.apn, wholesale_price = excluded.wholesale_price, currency = excluded.currency, cost_price_pkr = excluded.cost_price_pkr, selling_price_pkr = excluded.selling_price_pkr, raw_json = excluded.raw_json, updated_at = excluded.updated_at`
+        )
+        .bind(
+          rowId,
+          yesimPlanId || null,
+          oldId || null,
+          String(p.name || 'Pakistan plan'),
+          p.data != null ? String(p.data) : null,
+          p.data_unit != null ? String(p.data_unit) : 'GB',
+          p.days != null ? Number(p.days) : null,
+          p.countries_included != null ? String(p.countries_included) : 'Pakistan',
+          p.operators != null ? String(p.operators) : null,
+          p.apn != null ? String(p.apn) : null,
+          wholesale,
+          p.currency || 'EUR',
+          costPkr,
+          sellPkr,
+          truncateJson(p, 8000),
+          now,
+          now
+        )
+        .run();
+      saved += 1;
+    } catch (err) {
+      console.error('pakistan plan upsert failed:', err);
+    }
+  }
+
+  return c.json({
+    success: true,
+    message: `Saved ${saved} Pakistan plans to D1.`,
+    count: saved,
+  });
+});
+
+yesimApp.get('/pakistan-plans', async (c) => {
+  const db = c.env.DB;
+  await ensureYesimTables(db);
+  const rows = await db.prepare(`SELECT * FROM pakistan_plans ORDER BY selling_price_pkr ASC, name ASC`).all<any>();
+  return c.json({ success: true, plans: rows.results || [], count: (rows.results || []).length });
+});
+
+yesimApp.post('/refresh-inventory', async (c) => {
+  const db = c.env.DB;
+  await ensureYesimTables(db);
+  const currentUser = c.get('user');
+
+  const iccidSet = new Set<string>();
+  const existing = await db.prepare(`SELECT iccid FROM esims WHERE is_deleted = 0 AND iccid IS NOT NULL`).all<{ iccid: string }>();
+  for (const row of existing.results || []) if (row.iccid) iccidSet.add(String(row.iccid).trim());
+  const cached = await db.prepare(`SELECT iccid FROM yesim_profiles WHERE iccid IS NOT NULL`).all<{ iccid: string }>();
+  for (const row of cached.results || []) if (row.iccid) iccidSet.add(String(row.iccid).trim());
+
+  const orders = await callYesim(db, currentUser, { action: 'ORDERS_REFRESH', method: 'GET', path: '/orders', params: { search: '' } });
+  if (orders.ok) {
+    const list = Array.isArray(orders.data) ? orders.data : orders.data?.orders || orders.data?.esims || orders.data?.data || [];
+    if (Array.isArray(list)) {
+      for (const item of list) {
+        const iccid = item?.iccid || item?.esim?.iccid;
+        if (iccid) iccidSet.add(String(iccid).trim());
+      }
+    }
+  }
+
+  const iccids = [...iccidSet].filter(Boolean).slice(0, 40);
+  const inventory: any[] = [];
+  const errors: string[] = [];
+
+  for (const iccid of iccids) {
+    const result = await callYesim(db, currentUser, {
+      action: 'SIM_INFO_REFRESH',
+      method: 'GET',
+      path: '/sim_info',
+      params: { iccid },
+    });
+    if (!result.ok) {
+      errors.push(`${iccid}: ${result.error || 'failed'}`);
+      continue;
+    }
+    await upsertProfile(db, result.data);
+    try {
+      const synced = await syncEsimInventory(db, result.data, currentUser);
+      if (synced) inventory.push(synced);
+    } catch (err: any) {
+      errors.push(`${iccid}: ${err.message || 'sync failed'}`);
+    }
+  }
+
+  return c.json({
+    success: true,
+    message: `Refreshed ${inventory.length} eSIM${inventory.length === 1 ? '' : 's'} from Yesim.`,
+    scanned: iccids.length,
+    inventory,
+    errors: errors.slice(0, 8),
+  });
 });
 
 yesimApp.post('/new-user', async (c) => {

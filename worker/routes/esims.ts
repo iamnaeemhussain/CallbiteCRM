@@ -7,6 +7,66 @@ const esimsApp = new Hono<{ Bindings: Env; Variables: { user: StaffUser } }>();
 
 esimsApp.use('*', authMiddleware);
 
+esimsApp.put('/:id/holder', async (c) => {
+  try {
+    const db = c.env.DB;
+    const currentUser = c.get('user');
+    const esimId = c.req.param('id');
+    const body = await c.req.json<{ full_name?: string; whatsapp_number?: string }>();
+    const fullName = (body.full_name || '').trim();
+    const phone = (body.whatsapp_number || '').trim();
+
+    if (!fullName) return c.json({ success: false, error: 'Name is required.' }, 400);
+    if (!phone) return c.json({ success: false, error: 'WhatsApp number is required.' }, 400);
+
+    const esim = await db.prepare(`SELECT * FROM esims WHERE id = ? AND is_deleted = 0`).bind(esimId).first<any>();
+    if (!esim) return c.json({ success: false, error: 'eSIM not found.' }, 404);
+
+    const now = new Date().toISOString();
+    const dummyIds = new Set(['', 'CUST-YESIM']);
+    let customerId = esim.customer_id as string | null;
+
+    const existingCustomer = customerId
+      ? await db.prepare(`SELECT * FROM customers WHERE id = ? AND is_deleted = 0`).bind(customerId).first<any>()
+      : null;
+
+    if (!existingCustomer || dummyIds.has(String(customerId || ''))) {
+      const byPhone = await db
+        .prepare(`SELECT id FROM customers WHERE whatsapp_number = ? AND is_deleted = 0`)
+        .bind(phone)
+        .first<{ id: string }>();
+      if (byPhone) {
+        customerId = byPhone.id;
+        await db
+          .prepare(`UPDATE customers SET full_name = ?, updated_at = ?, last_activity_at = ? WHERE id = ?`)
+          .bind(fullName, now, now, customerId)
+          .run();
+      } else {
+        customerId = await generateId(db, 'customers', 'CUST', 1001);
+        await db
+          .prepare(
+            `INSERT INTO customers (id, full_name, whatsapp_number, phone_number, email, country, city, source, referred_by_customer_id, status, assigned_staff_id, internal_notes, is_deleted, created_at, updated_at, last_activity_at)
+             VALUES (?, ?, ?, NULL, NULL, 'Pakistan', NULL, 'Other', NULL, 'Active', ?, NULL, 0, ?, ?, ?)`
+          )
+          .bind(customerId, fullName, phone, currentUser.id, now, now, now)
+          .run();
+      }
+      await db.prepare(`UPDATE esims SET customer_id = ?, updated_at = ? WHERE id = ?`).bind(customerId, now, esimId).run();
+    } else {
+      customerId = existingCustomer.id;
+      await db
+        .prepare(`UPDATE customers SET full_name = ?, whatsapp_number = ?, updated_at = ?, last_activity_at = ? WHERE id = ?`)
+        .bind(fullName, phone, now, now, customerId)
+        .run();
+    }
+
+    return c.json({ success: true, message: 'User profile saved.', customer_id: customerId });
+  } catch (err: any) {
+    console.error('Assign holder error:', err);
+    return c.json({ success: false, error: err.message || 'Failed to save user profile.' }, 500);
+  }
+});
+
 // List eSIMs
 esimsApp.get('/', async (c) => {
   try {
@@ -27,7 +87,7 @@ esimsApp.get('/', async (c) => {
     let query = `
       SELECT 
         e.*,
-        c.full_name AS customer_name,
+        COALESCE(c.full_name, 'Unassigned') AS customer_name,
         c.whatsapp_number AS customer_phone,
         u.name AS created_by_staff_name
       FROM esims e
