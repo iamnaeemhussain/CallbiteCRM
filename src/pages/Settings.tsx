@@ -20,7 +20,7 @@ import { useToast } from '../contexts/ToastContext';
 import { api } from '../utils/api';
 
 export const Settings: React.FC = () => {
-  const { settings, tags, refreshSettings, currencySymbol } = useSettings();
+  const { settings, tags, refreshSettings } = useSettings();
   const { isAdmin } = useAuth();
   const toast = useToast();
 
