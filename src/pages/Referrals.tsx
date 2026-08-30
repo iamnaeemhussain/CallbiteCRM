@@ -104,9 +104,8 @@ export const Referrals: React.FC = () => {
     setConvertingId(id);
     try {
       const res = await api.post(`/api/referrals/requests/${id}/convert`);
-      toast.success(res.message || 'Converted to customer.');
+      toast.success(res.message || 'Referral marked converted.');
       await loadAll();
-      if (res.customer_id) navigate(`/customers/${res.customer_id}`);
     } catch (err: any) {
       toast.error(err.message || 'Failed to convert.');
     } finally {
@@ -127,8 +126,8 @@ export const Referrals: React.FC = () => {
             Referral requests from the Google Sheet, plus in-CRM referral tracking
           </p>
         </div>
-        <Button variant="secondary" leftIcon={<Users className="w-4 h-4" />} onClick={() => navigate('/customers')}>
-          View All Customers
+        <Button variant="secondary" leftIcon={<Users className="w-4 h-4" />} onClick={() => navigate('/esims')}>
+          eSIM Inventory
         </Button>
       </div>
 
@@ -268,11 +267,7 @@ export const Referrals: React.FC = () => {
                                 Convert
                               </Button>
                             )}
-                            {r.converted_customer_id && (
-                              <Button size="xs" variant="ghost" onClick={() => navigate(`/customers/${r.converted_customer_id}`)}>
-                                Customer
-                              </Button>
-                            )}
+
                             {r.status !== 'Declined' && r.status !== 'Converted' && (
                               <Button size="xs" variant="ghost" onClick={() => setRequestStatus(r.id, 'Declined')}>
                                 Decline

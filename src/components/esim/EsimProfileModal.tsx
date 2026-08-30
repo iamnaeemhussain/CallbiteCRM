@@ -4,7 +4,6 @@ import { Modal } from '../common/Modal';
 import { Button } from '../common/Button';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 import { useToast } from '../../contexts/ToastContext';
-import { useSettings } from '../../contexts/SettingsContext';
 import { api } from '../../utils/api';
 import { formatDate, getWhatsAppLink } from '../../utils/formatters';
 import { Copy, Download, MessageSquare, RefreshCw, Share2, Zap } from 'lucide-react';
@@ -55,7 +54,6 @@ function pickLpa(data: any, esim: any): string {
 
 export const EsimProfileModal: React.FC<EsimProfileModalProps> = ({ isOpen, onClose, esim, onUpdated }) => {
   const toast = useToast();
-  const { formatPrice } = useSettings();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const [live, setLive] = useState<any>(esim);
@@ -351,7 +349,7 @@ export const EsimProfileModal: React.FC<EsimProfileModalProps> = ({ isOpen, onCl
                   {plans.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name} — {p.data_amount}
-                      {p.data_unit}/{p.days}d — {formatPrice(p.selling_price_pkr)}
+                      {p.data_unit}/{p.days}d — {p.currency || 'EUR'} {p.wholesale_price}
                     </option>
                   ))}
                 </select>

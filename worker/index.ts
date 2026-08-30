@@ -4,10 +4,7 @@ import { Env, StaffUser } from './types';
 import { dropRetiredTables } from './retired';
 import authApp from './routes/auth';
 import dashboardApp from './routes/dashboard';
-import customersApp from './routes/customers';
 import esimsApp from './routes/esims';
-import interactionsApp from './routes/interactions';
-import notesApp from './routes/notes';
 import referralsApp from './routes/referrals';
 import staffApp from './routes/staff';
 import settingsApp from './routes/settings';
@@ -34,10 +31,7 @@ app.use('/api/*', async (c, next) => {
 
 app.route('/api/auth', authApp);
 app.route('/api/dashboard', dashboardApp);
-app.route('/api/customers', customersApp);
 app.route('/api/esims', esimsApp);
-app.route('/api/interactions', interactionsApp);
-app.route('/api/notes', notesApp);
 app.route('/api/referrals', referralsApp);
 app.route('/api/staff', staffApp);
 app.route('/api/settings', settingsApp);
@@ -47,7 +41,7 @@ app.route('/api/yesim', yesimApp);
 app.get('/api/health', (c) => {
   return c.json({
     status: 'ok',
-    system: 'Callbite Customer Management Portal',
+    system: 'Callbite Esim Staff CRM',
     timestamp: new Date().toISOString(),
   });
 });

@@ -5,6 +5,11 @@ const RETIRED_TABLES = [
   'audit_logs',
   'package_presets',
   'esim_providers',
+  'customer_tags',
+  'notes',
+  'interactions',
+  'activity_timeline',
+  'customers',
 ];
 
 let dropped = false;
@@ -20,7 +25,7 @@ export async function dropRetiredTables(db: D1Database) {
         console.error(`Failed to drop ${table}:`, err);
       }
     }
-    await db.prepare('PRAGMA foreign_keys = ON').run();
+    // Leave FKs off so eSIM rows still insert after customers is gone.
   } catch (err) {
     console.error('dropRetiredTables failed:', err);
   }

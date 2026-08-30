@@ -68,22 +68,10 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
   const [costPrice, setCostPrice] = useState('2800');
   const [paymentMethod, setPaymentMethod] = useState('Easypaisa');
 
-  const [allCustomers, setAllCustomers] = useState<{ id: string; full_name: string; whatsapp_number: string }[]>([]);
+  const [holderName, setHolderName] = useState('');
+  const [holderPhone, setHolderPhone] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  // Fetch latest packages and providers from backend when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      Promise.all([
-        !customerId ? api.get('/api/customers', { limit: 100 }).catch(() => ({ success: false, customers: [] })) : Promise.resolve({ success: false, customers: [] }),
-      ]).then(([custRes]) => {
-        if (custRes && custRes.success && custRes.customers) {
-          setAllCustomers(custRes.customers);
-        }
-      });
-    }
-  }, [isOpen, customerId]);
 
   // Combined packages list: prioritize freshly fetched catalog packages
   useEffect(() => {
@@ -194,12 +182,6 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const targetCustomer = customerId || selectedCustomerId;
-    if (!targetCustomer) {
-      toast.error('Please select a customer for this eSIM.');
-      return;
-    }
-
     if (!iccid.trim()) {
       toast.error('ICCID number is required.');
       return;
@@ -237,7 +219,8 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
         onClose();
       } else {
         const res = await api.post('/api/esims', {
-          customer_id: targetCustomer,
+          holder_name: holderName.trim() || undefined,
+          holder_phone: holderPhone.trim() || undefined,
           iccid: iccid.trim(),
           country_region: countryRegion.trim(),
           provider: provider.trim(),
@@ -291,25 +274,28 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Customer Select (if not passed directly) */}
-        {!customerId && !isEdit && (
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-              Select Customer *
-            </label>
-            <select
-              required
-              value={selectedCustomerId}
-              onChange={(e) => setSelectedCustomerId(e.target.value)}
-              className="w-full text-sm rounded-xl border border-slate-300 px-3.5 py-2 text-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
-            >
-              <option value="">-- Select Customer --</option>
-              {allCustomers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.full_name} ({c.id} - {c.whatsapp_number})
-                </option>
-              ))}
-            </select>
+        {!isEdit && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Holder name</label>
+              <input
+                type="text"
+                value={holderName}
+                onChange={(e) => setHolderName(e.target.value)}
+                placeholder="Name for this ICCID"
+                className="w-full text-sm rounded-xl border border-slate-300 px-3.5 py-2 text-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">WhatsApp number</label>
+              <input
+                type="text"
+                value={holderPhone}
+                onChange={(e) => setHolderPhone(e.target.value)}
+                placeholder="+92..."
+                className="w-full text-sm font-mono rounded-xl border border-slate-300 px-3.5 py-2 text-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+              />
+            </div>
           </div>
         )}
 
@@ -394,11 +380,7 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
               className="w-full text-sm rounded-xl border border-slate-300 px-3.5 py-2 text-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white font-medium"
             >
               <option value="Callbite Partner">Callbite Partner</option>
-              {providersList.map((p) => (
-                <option key={p.id} value={p.name}>
-                  {p.name} ({p.country_coverage})
-                </option>
-              ))}
+
               <option value="Direct Carrier / Partner">Direct Carrier / Partner</option>
             </select>
           </div>

@@ -4,12 +4,19 @@ import { Button } from '../components/common/Button';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { Modal } from '../components/common/Modal';
 import { useToast } from '../contexts/ToastContext';
-import { useSettings } from '../contexts/SettingsContext';
 import { api } from '../utils/api';
+
+function formatEur(plan: any): string {
+  const currency = plan?.currency || 'EUR';
+  const n = Number(plan?.wholesale_price ?? plan?.price ?? 0);
+  const formatted = Number.isFinite(n)
+    ? n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : '—';
+  return `${currency} ${formatted}`;
+}
 
 export const Packages: React.FC = () => {
   const toast = useToast();
-  const { formatPrice } = useSettings();
   const [plans, setPlans] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -50,7 +57,7 @@ export const Packages: React.FC = () => {
         <div>
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">Packages</h2>
           <p className="text-xs text-slate-500 mt-1">
-            Yesim plans whose name is Pakistan and whose included country is Pakistan. Saved in D1. Read-only cards.
+            Yesim plans whose name is Pakistan and whose included country is Pakistan. Price is Yesim EUR wholesale.
           </p>
         </div>
         <Button
@@ -70,7 +77,9 @@ export const Packages: React.FC = () => {
           <div className="p-12 text-center text-slate-500">
             <Package className="w-10 h-10 text-slate-300 mx-auto mb-3" />
             <h4 className="text-base font-bold text-slate-800">No Pakistan plans saved yet</h4>
-            <p className="text-xs text-slate-400 mt-1 mb-4">Fetch live Yesim plans for Pakistan and store them in D1.</p>
+            <p className="text-xs text-slate-400 mt-1 mb-4">
+              Load live Yesim plans named Pakistan that include country Pakistan.
+            </p>
             <Button size="sm" onClick={handleRefresh} isLoading={isSyncing}>
               Load Pakistan plans
             </Button>
@@ -83,7 +92,7 @@ export const Packages: React.FC = () => {
                   <th className="px-4 py-3.5">Plan</th>
                   <th className="px-3 py-3.5">Data / Days</th>
                   <th className="px-3 py-3.5">Coverage</th>
-                  <th className="px-3 py-3.5">Price (PKR)</th>
+                  <th className="px-3 py-3.5">Price (EUR)</th>
                   <th className="px-3 py-3.5">Plan ID</th>
                   <th className="px-4 py-3.5 text-right">View</th>
                 </tr>
@@ -101,8 +110,8 @@ export const Packages: React.FC = () => {
                     </td>
                     <td className="px-3 py-3.5">{p.countries_included || 'Pakistan'}</td>
                     <td className="px-3 py-3.5">
-                      <div className="font-bold text-slate-900">{formatPrice(p.selling_price_pkr)}</div>
-                      <div className="text-[10px] text-slate-400">Cost {formatPrice(p.cost_price_pkr)}</div>
+                      <div className="font-bold text-slate-900">{formatEur(p)}</div>
+                      <div className="text-[10px] text-slate-400">Yesim wholesale</div>
                     </td>
                     <td className="px-3 py-3.5 font-mono text-[10px] text-slate-500">
                       {p.old_id || p.yesim_plan_id || p.id}
@@ -145,13 +154,9 @@ export const Packages: React.FC = () => {
                 <div className="text-[10px] font-bold uppercase text-slate-500">Duration</div>
                 <div className="text-lg font-black text-slate-900">{selected.days || '—'} days</div>
               </div>
-              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100">
-                <div className="text-[10px] font-bold uppercase text-slate-500">Selling (PKR)</div>
-                <div className="text-base font-black text-slate-900">{formatPrice(selected.selling_price_pkr)}</div>
-              </div>
-              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100">
-                <div className="text-[10px] font-bold uppercase text-slate-500">Cost (PKR)</div>
-                <div className="text-base font-black text-slate-900">{formatPrice(selected.cost_price_pkr)}</div>
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100 col-span-2">
+                <div className="text-[10px] font-bold uppercase text-slate-500">Yesim price</div>
+                <div className="text-base font-black text-slate-900">{formatEur(selected)}</div>
               </div>
             </div>
             <div className="space-y-2 text-xs">
@@ -164,9 +169,6 @@ export const Packages: React.FC = () => {
               {selected.apn && <div className="font-mono text-slate-500">APN: {selected.apn}</div>}
               <div className="font-mono text-slate-400">
                 plan_id: {selected.old_id || selected.yesim_plan_id || selected.id}
-              </div>
-              <div className="text-slate-400">
-                Wholesale {selected.currency || 'EUR'} {selected.wholesale_price}
               </div>
             </div>
           </div>

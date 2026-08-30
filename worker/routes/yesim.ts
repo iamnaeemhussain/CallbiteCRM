@@ -107,28 +107,6 @@ function mapYesimStatus(profile: any, expiry?: string | null): 'Pending' | 'Acti
   return 'Active';
 }
 
-async function ensureUnassignedCustomer(db: D1Database): Promise<string> {
-  const existing = await db.prepare(`SELECT id FROM customers WHERE id = ? AND is_deleted = 0`).bind('CUST-YESIM').first<{ id: string }>();
-  if (existing) return existing.id;
-  const now = new Date().toISOString();
-  try {
-    await db
-      .prepare(
-        `INSERT INTO customers (id, full_name, whatsapp_number, phone_number, email, country, city, source, referred_by_customer_id, status, assigned_staff_id, internal_notes, is_deleted, created_at, updated_at, last_activity_at)
-         VALUES (?, ?, ?, NULL, NULL, NULL, NULL, ?, NULL, ?, NULL, ?, 0, ?, ?, ?)`
-      )
-      .bind('CUST-YESIM', 'Yesim Unassigned', '+920000000000', 'Other', 'Active', 'Holding account for Yesim API eSIMs not yet linked to a customer.', now, now, now)
-      .run();
-    return 'CUST-YESIM';
-  } catch {
-    const byId = await db.prepare(`SELECT id FROM customers WHERE id = ?`).bind('CUST-YESIM').first<{ id: string }>();
-    if (byId) return byId.id;
-    const byPhone = await db.prepare(`SELECT id FROM customers WHERE whatsapp_number = ? AND is_deleted = 0`).bind('+920000000000').first<{ id: string }>();
-    if (byPhone) return byPhone.id;
-    throw new Error('Could not create Yesim unassigned customer for inventory.');
-  }
-}
-
 async function syncEsimInventory(
   db: D1Database,
   payload: any,
@@ -173,7 +151,7 @@ async function syncEsimInventory(
     return { action: 'updated', esim_id: existing.id, iccid, customer_id: existing.customer_id };
   }
 
-  const customerId = await ensureUnassignedCustomer(db);
+  const customerId = '';
   const esimId = await generateId(db, 'esims', 'ESIM', 2001);
   let validStaff: string | null = null;
   if (staffId) {
@@ -187,17 +165,6 @@ async function syncEsimInventory(
     )
     .bind(esimId, customerId, iccid, 'Global', 'Yesim', planLabel, allowance || 'Data', duration || 'Yesim plan', start, expiry, activation, status, qr, 'Yesim API', note || null, validStaff, now, now, left, pack, used)
     .run();
-
-  try {
-    await logTimeline(db, {
-      customer_id: customerId,
-      staff_id: validStaff,
-      action_type: 'ESIM_ADDED',
-      title: `eSIM imported from Yesim (${iccid})`,
-      description: `${currentUser.name} saved Yesim ICCID ${iccid} to eSIM Inventory.`,
-      metadata: { iccid, esim_id: esimId, source: 'sim_info' },
-    });
-  } catch {}
 
   return { action: 'created', esim_id: esimId, iccid, customer_id: customerId };
 }

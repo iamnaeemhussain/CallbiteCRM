@@ -373,7 +373,7 @@ export const Settings: React.FC = () => {
         <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-card space-y-4 max-w-2xl">
           <h3 className="text-base font-bold text-slate-900">Export Full System Database Backup</h3>
           <p className="text-xs text-slate-500 leading-relaxed">
-            Download a JSON snapshot of customers, eSIM records, interactions, notes, and timeline.
+            Download a JSON snapshot of eSIM records and staff.
           </p>
 
           <Button

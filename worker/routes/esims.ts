@@ -71,11 +71,10 @@ esimsApp.get('/', async (c) => {
     let query = `
       SELECT 
         e.*,
-        COALESCE(e.holder_name, c.full_name, 'Unassigned') AS customer_name,
-        COALESCE(e.holder_phone, c.whatsapp_number) AS customer_phone,
+        COALESCE(e.holder_name, 'Unassigned') AS customer_name,
+        e.holder_phone AS customer_phone,
         u.name AS created_by_staff_name
       FROM esims e
-      LEFT JOIN customers c ON e.customer_id = c.id
       LEFT JOIN users u ON e.created_by_staff_id = u.id
       WHERE e.is_deleted = 0
     `;
@@ -96,10 +95,10 @@ esimsApp.get('/', async (c) => {
         e.country_region LIKE ? OR
         e.provider LIKE ? OR
         e.tag LIKE ? OR
-        c.full_name LIKE ? OR
-        c.whatsapp_number LIKE ?
+        e.holder_name LIKE ? OR
+        e.holder_phone LIKE ?
       )`;
-      params.push(s, s, s, s, s, s, s, s, s, s);
+      params.push(s, s, s, s, s, s, s, s);
     }
 
     if (status) {
@@ -185,13 +184,10 @@ esimsApp.get('/:id', async (c) => {
       .prepare(
         `SELECT 
           e.*,
-          c.full_name AS customer_name,
-          c.whatsapp_number AS customer_phone,
-          c.email AS customer_email,
-          c.status AS customer_status,
+          COALESCE(e.holder_name, 'Unassigned') AS customer_name,
+          e.holder_phone AS customer_phone,
           u.name AS created_by_staff_name
          FROM esims e
-         JOIN customers c ON e.customer_id = c.id
          LEFT JOIN users u ON e.created_by_staff_id = u.id
          WHERE e.id = ? AND e.is_deleted = 0`
       )
@@ -217,7 +213,9 @@ esimsApp.post('/', async (c) => {
     const db = c.env.DB;
     const currentUser = c.get('user');
     const body = await c.req.json<{
-      customer_id: string;
+      customer_id?: string;
+      holder_name?: string;
+      holder_phone?: string;
       iccid: string;
       country_region: string;
       provider: string;
@@ -240,9 +238,6 @@ esimsApp.post('/', async (c) => {
       record_transaction?: boolean;
     }>();
 
-    if (!body.customer_id) {
-      return c.json({ success: false, error: 'Customer is required.' }, 400);
-    }
     if (!body.iccid || !body.iccid.trim()) {
       return c.json({ success: false, error: 'ICCID is required.' }, 400);
     }
@@ -259,14 +254,9 @@ esimsApp.post('/', async (c) => {
       return c.json({ success: false, error: `ICCID "${body.iccid.trim()}" already exists in the system (eSIM ID: ${dup.id}).` }, 400);
     }
 
-    const customer = await db
-      .prepare(`SELECT id, full_name FROM customers WHERE id = ? AND is_deleted = 0`)
-      .bind(body.customer_id)
-      .first<{ id: string; full_name: string }>();
-
-    if (!customer) {
-      return c.json({ success: false, error: 'Target customer does not exist.' }, 404);
-    }
+    await ensureHolderColumns(db);
+    const holderName = (body.holder_name || '').trim() || null;
+    const holderPhone = (body.holder_phone || '').trim() || null;
 
     const validProviderId: string | null = null;
     const validPackageId: string | null = null;
@@ -292,12 +282,12 @@ esimsApp.post('/', async (c) => {
           id, customer_id, iccid, country_region, provider, provider_id,
           package_name, package_id, data_allowance, duration, start_date,
           expiry_date, renewal_date, activation_date, status, qr_code_data,
-          apn_info, tag, notes, created_by_staff_id, is_deleted, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
+          apn_info, tag, notes, created_by_staff_id, is_deleted, created_at, updated_at, holder_name, holder_phone
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`
       )
       .bind(
         esimId,
-        body.customer_id,
+        body.customer_id || '',
         body.iccid.trim(),
         body.country_region || 'Pakistan',
         body.provider || 'Callbite Partner',
@@ -316,18 +306,11 @@ esimsApp.post('/', async (c) => {
         body.notes?.trim() || null,
         validStaffId,
         now,
-        now
+        now,
+        holderName,
+        holderPhone
       )
       .run();
-
-    await logTimeline(db, {
-      customer_id: body.customer_id,
-      staff_id: validStaffId,
-      action_type: 'ESIM_ADDED',
-      title: `eSIM Added: ${body.package_name}`,
-      description: `${currentUser.name} added ${body.package_name} (${body.data_allowance}) - ICCID: ${body.iccid.trim()}${body.tag ? ' [' + body.tag + ']' : ''}. Expires ${body.expiry_date}.`,
-      metadata: { iccid: body.iccid.trim(), package: body.package_name, expiry_date: body.expiry_date, tag: body.tag },
-    });
 
     const clientIp = c.req.header('cf-connecting-ip') || '127.0.0.1';
     await logAudit(db, {
@@ -336,8 +319,8 @@ esimsApp.post('/', async (c) => {
       action: 'CREATE',
       record_type: 'ESIM',
       record_id: esimId,
-      new_value: { customer_id: body.customer_id, iccid: body.iccid, package: body.package_name, tag: body.tag },
-      change_summary: `Added eSIM ${body.package_name} (${body.iccid}) for ${customer.full_name}`,
+      new_value: { iccid: body.iccid, package: body.package_name, tag: body.tag, holder_name: holderName },
+      change_summary: `Added eSIM ${body.package_name} (${body.iccid})`,
       ip_address: clientIp,
     });
 

@@ -218,18 +218,10 @@ export const Staff: React.FC = () => {
                 </div>
 
                 {/* Staff Performance Metrics */}
-                <div className="grid grid-cols-3 gap-2 pt-3 border-t border-slate-100 text-center mt-3">
+                <div className="grid grid-cols-1 gap-2 pt-3 border-t border-slate-100 text-center mt-3">
                   <div className="p-2 bg-slate-50 rounded-xl">
-                    <span className="text-[10px] font-bold uppercase text-slate-400 block">Customers</span>
-                    <span className="text-sm font-black text-slate-900">{stf.assigned_customers_count || 0}</span>
-                  </div>
-                  <div className="p-2 bg-slate-50 rounded-xl">
-                    <span className="text-[10px] font-bold uppercase text-slate-400 block">eSIMs</span>
+                    <span className="text-[10px] font-bold uppercase text-slate-400 block">eSIMs created</span>
                     <span className="text-sm font-black text-slate-900">{stf.created_esims_count || 0}</span>
-                  </div>
-                  <div className="p-2 bg-slate-50 rounded-xl">
-                    <span className="text-[10px] font-bold uppercase text-slate-400 block">Resolved</span>
-                    <span className="text-sm font-black text-slate-900">{stf.resolved_tickets_count || 0}</span>
                   </div>
                 </div>
               </div>

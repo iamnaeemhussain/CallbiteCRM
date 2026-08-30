@@ -27,36 +27,11 @@ export async function ensureDbInitialized(db: D1Database) {
         last_login_at TEXT
       );
 
-      CREATE TABLE IF NOT EXISTS customers (
-        id TEXT PRIMARY KEY,
-        full_name TEXT NOT NULL,
-        whatsapp_number TEXT NOT NULL,
-        phone_number TEXT,
-        email TEXT,
-        country TEXT,
-        city TEXT,
-        source TEXT NOT NULL DEFAULT 'WhatsApp',
-        referred_by_customer_id TEXT REFERENCES customers(id) ON DELETE SET NULL,
-        status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive', 'VIP', 'Blocked')),
-        assigned_staff_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-        internal_notes TEXT,
-        is_deleted INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        last_activity_at TEXT NOT NULL
-      );
-
       CREATE TABLE IF NOT EXISTS tags (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,
         color TEXT NOT NULL DEFAULT '#3b82f6',
         description TEXT
-      );
-
-      CREATE TABLE IF NOT EXISTS customer_tags (
-        customer_id TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
-        tag_name TEXT NOT NULL,
-        PRIMARY KEY (customer_id, tag_name)
       );
 
       CREATE TABLE IF NOT EXISTS esim_providers (
@@ -96,7 +71,7 @@ export async function ensureDbInitialized(db: D1Database) {
 
       CREATE TABLE IF NOT EXISTS esims (
         id TEXT PRIMARY KEY,
-        customer_id TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+        customer_id TEXT NOT NULL DEFAULT '',
         iccid TEXT NOT NULL UNIQUE,
         country_region TEXT NOT NULL,
         provider TEXT NOT NULL,
@@ -321,10 +296,6 @@ export async function logTimeline(
       )
       .run();
 
-    await db
-      .prepare(`UPDATE customers SET last_activity_at = ?, updated_at = ? WHERE id = ?`)
-      .bind(now, now, params.customer_id)
-      .run();
   } catch (err) {
     console.error('Failed to write to activity_timeline:', err);
   }

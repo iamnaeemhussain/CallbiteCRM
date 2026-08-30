@@ -120,22 +120,14 @@ settingsApp.get('/export', async (c) => {
   try {
     const db = c.env.DB;
 
-    const customers = await db.prepare(`SELECT * FROM customers WHERE is_deleted = 0`).all();
     const esims = await db.prepare(`SELECT * FROM esims WHERE is_deleted = 0`).all();
-    const interactions = await db.prepare(`SELECT * FROM interactions`).all();
-    const notes = await db.prepare(`SELECT * FROM notes`).all();
-    const timeline = await db.prepare(`SELECT * FROM activity_timeline`).all();
     const staff = await db.prepare(`SELECT id, name, email, role, phone, status, created_at, last_login_at FROM users`).all();
 
     return c.json({
       success: true,
       exported_at: new Date().toISOString(),
       data: {
-        customers: customers.results || [],
         esims: esims.results || [],
-        interactions: interactions.results || [],
-        notes: notes.results || [],
-        activity_timeline: timeline.results || [],
         staff: staff.results || [],
       },
     });

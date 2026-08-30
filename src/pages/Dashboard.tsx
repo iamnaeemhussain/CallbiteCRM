@@ -1,11 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Users,
   CardSim as SimCard,
   RefreshCw,
   AlertTriangle,
-  Clock,
   RotateCcw,
 } from 'lucide-react';
 import { StatCard } from '../components/common/StatCard';
@@ -67,7 +65,7 @@ export const Dashboard: React.FC = () => {
     );
   }
 
-  const { customers, esims, expiry, attention, sources } = data;
+  const { esims, expiry, attention } = data;
   const expiringSoonCount = (expiry?.expiring_today || 0) + (expiry?.expiring_3_days || 0);
 
   return (
@@ -82,26 +80,15 @@ export const Dashboard: React.FC = () => {
           </div>
           <h2 className="text-2xl font-black tracking-tight">Callbite Esim Management</h2>
           <p className="text-xs text-slate-400 mt-1 max-w-lg">
-            Welcome {user?.name || 'staff'}. Customer 360 and eSIM inventory from D1.
+            Welcome {user?.name || 'staff'}. eSIM inventory from D1.
           </p>
         </div>
-        <Button variant="secondary" size="sm" leftIcon={<Users className="w-4 h-4" />} onClick={() => navigate('/customers')}>
-          All Customers
+        <Button variant="secondary" size="sm" leftIcon={<SimCard className="w-4 h-4" />} onClick={() => navigate('/esims')}>
+          eSIM Inventory
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Total Customers"
-          value={customers?.total || 0}
-          subtitle={`${customers?.active || 0} active • ${customers?.vip || 0} VIP`}
-          icon={<Users className="w-5 h-5 text-emerald-600" />}
-          iconBgColor="bg-emerald-50"
-          trend={`+${customers?.new_this_month || 0} this month`}
-          trendPositive={true}
-          onClick={() => navigate('/customers')}
-          accentColor="#10b981"
-        />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard
           title="Active eSIMs"
           value={esims?.active || 0}
@@ -126,7 +113,7 @@ export const Dashboard: React.FC = () => {
         <StatCard
           title="Expired eSIMs"
           value={esims?.expired || 0}
-          subtitle="Needs follow-up on customer profile"
+          subtitle="Needs follow-up in inventory"
           icon={<AlertTriangle className="w-5 h-5 text-rose-600" />}
           iconBgColor="bg-rose-50"
           onClick={() => navigate('/esims?status=Expired')}
@@ -134,100 +121,44 @@ export const Dashboard: React.FC = () => {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-card">
-          <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
-            <div className="flex items-center gap-2">
-              <RefreshCw className="w-5 h-5 text-amber-500" />
-              <h3 className="text-base font-bold text-slate-900">Expiring eSIMs</h3>
-            </div>
-            <Button variant="outline" size="xs" onClick={() => navigate('/esims')}>
-              Open Inventory
-            </Button>
+      <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-card">
+        <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
+          <div className="flex items-center gap-2">
+            <RefreshCw className="w-5 h-5 text-amber-500" />
+            <h3 className="text-base font-bold text-slate-900">Expiring eSIMs</h3>
           </div>
-          {attention?.expiring_esims?.length === 0 ? (
-            <div className="py-8 text-center text-xs text-slate-400">No eSIMs expiring in the next 3 days.</div>
-          ) : (
-            <div className="space-y-2.5">
-              {attention?.expiring_esims?.map((e: any) => {
-                const badge = getExpiryBadge(e.expiry_date, e.status);
-                return (
-                  <div
-                    key={e.id}
-                    onClick={() => e.customer_id && navigate(`/customers/${e.customer_id}?tab=esims`)}
-                    className="p-3 bg-white border border-slate-200/80 rounded-xl flex items-center justify-between hover:bg-slate-50 cursor-pointer"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-slate-900">{e.package_name}</span>
-                        <span className="text-[11px] font-mono text-slate-500">{e.iccid}</span>
-                      </div>
-                      <div className="text-xs text-slate-600 mt-1">
-                        {e.customer_name || 'Unassigned'} {e.customer_phone ? `(${e.customer_phone})` : ''}
-                      </div>
-                    </div>
-                    <span className={`px-2.5 py-1 text-xs rounded-full border ${badge.color}`}>{badge.text}</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <Button variant="outline" size="xs" onClick={() => navigate('/esims')}>
+            Open Inventory
+          </Button>
         </div>
-
-        <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-card">
-          <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
-            <div className="flex items-center gap-2">
-              <Users className="w-5 h-5 text-indigo-500" />
-              <h3 className="text-base font-bold text-slate-900">Acquisition Sources</h3>
-            </div>
-          </div>
-          <div className="space-y-3">
-            {sources?.map((src: any) => {
-              const totalCust = customers?.total || 1;
-              const pct = Math.round((src.count / totalCust) * 100);
+        {attention?.expiring_esims?.length === 0 ? (
+          <div className="py-8 text-center text-xs text-slate-400">No eSIMs expiring in the next 3 days.</div>
+        ) : (
+          <div className="space-y-2.5">
+            {attention?.expiring_esims?.map((e: any) => {
+              const badge = getExpiryBadge(e.expiry_date, e.status);
               return (
-                <div key={src.source} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-slate-700">{src.source}</span>
-                    <span className="font-bold text-slate-900">
-                      {src.count} ({pct}%)
-                    </span>
+                <div
+                  key={e.id}
+                  onClick={() => navigate('/esims')}
+                  className="p-3 bg-white border border-slate-200/80 rounded-xl flex items-center justify-between hover:bg-slate-50 cursor-pointer"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-900">{e.package_name}</span>
+                      <span className="text-[11px] font-mono text-slate-500">{e.iccid}</span>
+                    </div>
+                    <div className="text-xs text-slate-600 mt-1">
+                      {e.holder_name || e.customer_name || 'Unassigned'}{' '}
+                      {e.holder_phone || e.customer_phone ? `(${e.holder_phone || e.customer_phone})` : ''}
+                    </div>
                   </div>
-                  <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                    <div className="bg-emerald-500 h-2 rounded-full" style={{ width: `${pct}%` }} />
-                  </div>
+                  <span className={`px-2.5 py-1 text-xs rounded-full border ${badge.color}`}>{badge.text}</span>
                 </div>
               );
             })}
           </div>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-card">
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
-          <div className="flex items-center gap-2">
-            <Clock className="w-5 h-5 text-slate-700" />
-            <h3 className="text-base font-bold text-slate-900">Recent Customer Activity</h3>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {attention?.recent_activity?.map((act: any) => (
-            <div
-              key={act.id}
-              onClick={() => navigate(`/customers/${act.customer_id}`)}
-              className="p-3 bg-slate-50/70 border border-slate-200/70 rounded-2xl flex items-start justify-between hover:bg-white cursor-pointer"
-            >
-              <div className="min-w-0 flex-1 pr-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-slate-900 truncate">{act.title}</span>
-                  <span className="text-[10px] font-mono text-slate-400">{act.customer_name}</span>
-                </div>
-                <p className="text-xs text-slate-600 mt-1 line-clamp-1">{act.description}</p>
-              </div>
-              <span className="text-[10px] font-mono text-slate-400 shrink-0">{formatDate(act.created_at, true)}</span>
-            </div>
-          ))}
-        </div>
+        )}
       </div>
     </div>
   );

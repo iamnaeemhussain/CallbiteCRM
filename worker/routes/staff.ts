@@ -17,10 +17,7 @@ staffApp.get('/', async (c) => {
       .prepare(
         `SELECT 
           u.id, u.name, u.email, u.role, u.phone, u.status, u.avatar_url, u.created_at, u.updated_at, u.last_login_at,
-          (SELECT COUNT(*) FROM customers c WHERE c.assigned_staff_id = u.id AND c.is_deleted = 0) AS assigned_customers_count,
-          (SELECT COUNT(*) FROM esims e WHERE e.created_by_staff_id = u.id AND e.is_deleted = 0) AS created_esims_count,
-          (SELECT COUNT(*) FROM support_tickets s WHERE s.assigned_staff_id = u.id AND s.status = 'Resolved') AS resolved_tickets_count,
-          (SELECT COUNT(*) FROM transactions t WHERE t.staff_id = u.id) AS transactions_count
+          (SELECT COUNT(*) FROM esims e WHERE e.created_by_staff_id = u.id AND e.is_deleted = 0) AS created_esims_count
          FROM users u
          ORDER BY u.role = 'ADMIN' DESC, u.name ASC`
       )

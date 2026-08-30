@@ -8,8 +8,6 @@ import { LoadingSpinner } from './components/common/LoadingSpinner';
 
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
-import { Customers } from './pages/Customers';
-import { CustomerProfile } from './pages/CustomerProfile';
 import { Esims } from './pages/Esims';
 import { Packages } from './pages/Packages';
 import { Referrals } from './pages/Referrals';
@@ -49,8 +47,6 @@ export function App() {
                 }
               >
                 <Route index element={<Dashboard />} />
-                <Route path="customers" element={<Customers />} />
-                <Route path="customers/:id" element={<CustomerProfile />} />
                 <Route path="esims" element={<Esims />} />
                 <Route path="packages" element={<Packages />} />
                 <Route path="referrals" element={<Referrals />} />
