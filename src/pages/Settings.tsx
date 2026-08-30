@@ -225,8 +225,8 @@ export const Settings: React.FC = () => {
               </label>
               <input
                 type="text"
-                value={currencySymbol}
-                onChange={(e) => setCurrencySymbol(e.target.value)}
+                value={currencySymbolInput}
+                onChange={(e) => setCurrencySymbolInput(e.target.value)}
                 placeholder="Rs. / PKR / $"
                 className="w-full text-sm rounded-xl border border-slate-300 px-3.5 py-2 text-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
               />
