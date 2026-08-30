@@ -4,9 +4,10 @@ import { Modal } from '../common/Modal';
 import { Button } from '../common/Button';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 import { useToast } from '../../contexts/ToastContext';
+import { useSettings } from '../../contexts/SettingsContext';
 import { api } from '../../utils/api';
-import { formatDate, getWhatsAppLink } from '../../utils/formatters';
-import { Copy, Download, MessageSquare, RefreshCw, Share2, Zap } from 'lucide-react';
+import { formatDate, cleanPhoneForWhatsApp } from '../../utils/formatters';
+import { Copy, MessageSquare, RefreshCw, Zap } from 'lucide-react';
 
 interface EsimProfileModalProps {
   isOpen: boolean;
@@ -52,8 +53,43 @@ function pickLpa(data: any, esim: any): string {
   return String(v || '');
 }
 
+const WA_TEMPLATES = [
+  {
+    id: 'renewal',
+    label: 'Renewal Reminder',
+    key: 'wa_template_renewal',
+    fallback: 'Hello! Your {package_name} eSIM ({iccid}) is expiring on {expiry_date}. Would you like to renew it today?',
+  },
+  {
+    id: 'expiry',
+    label: 'Expiry Notice',
+    key: 'wa_template_expiry',
+    fallback: 'Friendly reminder from Pak-tel.com that your {package_name} eSIM ({iccid}) will expire on {expiry_date}.',
+  },
+  {
+    id: 'confirmation',
+    label: 'Renewal Success',
+    key: 'wa_template_confirmation',
+    fallback: 'Your eSIM renewal for {package_name} ({iccid}) has been processed. New expiry date is {expiry_date}.',
+  },
+  {
+    id: 'support',
+    label: 'Support Reply',
+    key: 'wa_template_support',
+    fallback: 'Thank you for contacting Pak-tel.com support about eSIM {iccid} ({package_name}). Expiry: {expiry_date}.',
+  },
+];
+
+function fillWaTemplate(raw: string, vars: { package_name: string; expiry_date: string; iccid: string }) {
+  return String(raw || '')
+    .replace(/\{package_name\}/g, vars.package_name)
+    .replace(/\{expiry_date\}/g, vars.expiry_date)
+    .replace(/\{iccid\}/g, vars.iccid);
+}
+
 export const EsimProfileModal: React.FC<EsimProfileModalProps> = ({ isOpen, onClose, esim, onUpdated }) => {
   const toast = useToast();
+  const { settings } = useSettings();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const [live, setLive] = useState<any>(esim);
@@ -61,6 +97,8 @@ export const EsimProfileModal: React.FC<EsimProfileModalProps> = ({ isOpen, onCl
   const [isLoading, setIsLoading] = useState(false);
   const [plans, setPlans] = useState<any[]>([]);
   const [showTopup, setShowTopup] = useState(false);
+  const [showWa, setShowWa] = useState(false);
+  const [waTemplateId, setWaTemplateId] = useState('renewal');
   const [selectedPlanId, setSelectedPlanId] = useState('');
   const [paymentId, setPaymentId] = useState('');
   const [isTopping, setIsTopping] = useState(false);
@@ -96,6 +134,7 @@ export const EsimProfileModal: React.FC<EsimProfileModalProps> = ({ isOpen, onCl
     if (isOpen && esim) {
       setLive(esim);
       setShowTopup(false);
+      setShowWa(false);
       loadLive();
       api
         .get('/api/yesim/pakistan-plans')
@@ -129,18 +168,13 @@ export const EsimProfileModal: React.FC<EsimProfileModalProps> = ({ isOpen, onCl
   const holderName = live?.holder_name || live?.customer_name || 'Unassigned';
   const holderPhone = live?.holder_phone || live?.customer_phone || '';
 
-  const shareText = useMemo(() => {
-    return [
-      'QR Code & Activation',
-      '',
-      'QR Code & String',
-      lpa || '—',
-      iosLink ? `\niOS Tap Link\n${iosLink}` : '',
-      passport ? `\neSIM Passport\n${passport}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n');
-  }, [lpa, iosLink, passport]);
+  const waVars = {
+    package_name: String(live?.package_name || 'eSIM'),
+    expiry_date: formatDate(live?.plan_expired_at || live?.expiry_date),
+    iccid: String(live?.iccid || ''),
+  };
+  const selectedWa = WA_TEMPLATES.find((t) => t.id === waTemplateId) || WA_TEMPLATES[0];
+  const waMessage = fillWaTemplate(settings[selectedWa.key] || selectedWa.fallback, waVars);
 
   const handleTopup = async () => {
     if (!selectedPlanId) {
@@ -166,22 +200,13 @@ export const EsimProfileModal: React.FC<EsimProfileModalProps> = ({ isOpen, onCl
     }
   };
 
-  const handleShare = async () => {
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: `eSIM ${live?.iccid}`, text: shareText });
-        return;
-      }
-    } catch {}
-    await navigator.clipboard.writeText(shareText);
-    toast.success('QR & activation copied. Paste into any app, or use PDF / Print.');
+  const handleWhatsAppSend = () => {
+    const phone = cleanPhoneForWhatsApp(holderPhone);
+    const waUrl = phone
+      ? `https://wa.me/${phone}?text=${encodeURIComponent(waMessage)}`
+      : `https://wa.me/?text=${encodeURIComponent(waMessage)}`;
+    window.open(waUrl, '_blank', 'noopener,noreferrer');
   };
-
-  const handlePdf = () => {
-    window.print();
-  };
-
-  const waLink = getWhatsAppLink(holderPhone, shareText);
 
   return (
     <Modal
@@ -193,22 +218,28 @@ export const EsimProfileModal: React.FC<EsimProfileModalProps> = ({ isOpen, onCl
       footer={
         <div className="flex w-full flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" size="sm" leftIcon={<Download className="w-3.5 h-3.5" />} onClick={handlePdf}>
-              PDF / Print
+            <Button
+              variant="whatsapp"
+              size="sm"
+              leftIcon={<MessageSquare className="w-3.5 h-3.5" />}
+              onClick={() => {
+                setShowWa((v) => !v);
+                setShowTopup(false);
+              }}
+            >
+              WhatsApp
             </Button>
-            <Button variant="outline" size="sm" leftIcon={<Share2 className="w-3.5 h-3.5" />} onClick={handleShare}>
-              Share
-            </Button>
-            {holderPhone && (
-              <a href={waLink} target="_blank" rel="noreferrer">
-                <Button variant="whatsapp" size="sm" leftIcon={<MessageSquare className="w-3.5 h-3.5" />}>
-                  WhatsApp
-                </Button>
-              </a>
-            )}
           </div>
           <div className="flex gap-2">
-            <Button variant="success" size="sm" leftIcon={<Zap className="w-3.5 h-3.5" />} onClick={() => setShowTopup((v) => !v)}>
+            <Button
+              variant="success"
+              size="sm"
+              leftIcon={<Zap className="w-3.5 h-3.5" />}
+              onClick={() => {
+                setShowTopup((v) => !v);
+                setShowWa(false);
+              }}
+            >
               Top up
             </Button>
             <Button variant="primary" size="sm" onClick={onClose}>
@@ -333,6 +364,38 @@ export const EsimProfileModal: React.FC<EsimProfileModalProps> = ({ isOpen, onCl
               </div>
             </div>
           </div>
+
+          {showWa && (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4 space-y-3">
+              <div className="text-xs font-bold text-emerald-950">Predefined WhatsApp Messages</div>
+              <p className="text-[11px] text-slate-500">
+                Fills Settings templates with <span className="font-mono font-bold">{'{package_name}'}</span>,{' '}
+                <span className="font-mono font-bold">{'{expiry_date}'}</span>, <span className="font-mono font-bold">{'{iccid}'}</span>.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {WA_TEMPLATES.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setWaTemplateId(t.id)}
+                    className={`px-3 py-2 text-xs font-semibold rounded-xl border text-center transition-all ${
+                      waTemplateId === t.id
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              <div className="rounded-xl border border-emerald-100 bg-white p-3 text-xs text-slate-800 whitespace-pre-wrap leading-relaxed">
+                {waMessage || 'Save a template in Settings → WhatsApp Templates first.'}
+              </div>
+              <Button variant="whatsapp" size="sm" leftIcon={<MessageSquare className="w-3.5 h-3.5" />} onClick={handleWhatsAppSend}>
+                Open WhatsApp
+              </Button>
+            </div>
+          )}
 
           {showTopup && (
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4 space-y-3">

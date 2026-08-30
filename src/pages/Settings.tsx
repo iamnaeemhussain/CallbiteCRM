@@ -255,7 +255,7 @@ export const Settings: React.FC = () => {
             <div>
               <h3 className="text-base font-bold text-slate-900">Predefined WhatsApp Messages</h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Available variables: <span className="font-mono font-bold text-emerald-700">{`{customer_name}`}</span>, <span className="font-mono font-bold text-emerald-700">{`{package_name}`}</span>, <span className="font-mono font-bold text-emerald-700">{`{expiry_date}`}</span>, <span className="font-mono font-bold text-emerald-700">{`{iccid}`}</span>, <span className="font-mono font-bold text-emerald-700">{`{ticket_id}`}</span>
+                Available variables: <span className="font-mono font-bold text-emerald-700">{`{package_name}`}</span>, <span className="font-mono font-bold text-emerald-700">{`{expiry_date}`}</span>, <span className="font-mono font-bold text-emerald-700">{`{iccid}`}</span>
               </p>
             </div>
           </div>
