@@ -49,7 +49,9 @@ export const Packages: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">Packages</h2>
-          <p className="text-xs text-slate-500 mt-1">Pakistan plans from Yesim Partner API. Saved in D1. Read-only cards.</p>
+          <p className="text-xs text-slate-500 mt-1">
+            Yesim plans whose name is Pakistan and whose included country is Pakistan. Saved in D1. Read-only cards.
+          </p>
         </div>
         <Button
           variant="primary"

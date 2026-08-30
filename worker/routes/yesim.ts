@@ -628,14 +628,32 @@ yesimApp.get('/plans', async (c) => {
   return c.json({ success: true, count: plans.length, plans });
 });
 
+function blobHasPakistanCountry(value: any): boolean {
+  if (value == null || value === '') return false;
+  if (Array.isArray(value)) return value.some((item) => blobHasPakistanCountry(item));
+  if (typeof value === 'object') {
+    return blobHasPakistanCountry(
+      [value.name, value.country, value.countries, value.iso, value.iso2, value.iso3, value.code].filter(Boolean)
+    );
+  }
+  const text = String(value).toLowerCase();
+  if (/\bpakistan\b/.test(text)) return true;
+  const iso = String(value).toUpperCase().trim();
+  return iso === 'PK' || iso === 'PAK' || /(^|[^A-Z])PK([^A-Z]|$)/.test(iso) || /(^|[^A-Z])PAK([^A-Z]|$)/.test(iso);
+}
+
+/** Only Yesim plans whose name is Pakistan and whose coverage includes Pakistan. */
 function isPakistanPlan(p: any): boolean {
-  const iso = String(p?.countryIso2 || p?.iso2 || p?.iso3 || '').toUpperCase();
+  const name = String(p?.name || '').trim();
+  if (!/\bpakistan\b/i.test(name)) return false;
+  const iso = String(p?.countryIso2 || p?.iso2 || p?.iso3 || p?.country_code || '').toUpperCase().trim();
   if (iso === 'PK' || iso === 'PAK') return true;
-  const hay = [p?.name, p?.countries_included, p?.country, p?.countries, p?.operators, p?.plan_type]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
-  return /\bpakistan\b|\bpak\b/.test(hay) || /(^|[^a-z])pk([^a-z]|$)/.test(hay);
+  return (
+    blobHasPakistanCountry(p?.countries_included) ||
+    blobHasPakistanCountry(p?.country) ||
+    blobHasPakistanCountry(p?.countries) ||
+    blobHasPakistanCountry(p?.coverage)
+  );
 }
 
 yesimApp.post('/sync-pakistan-plans', async (c) => {
@@ -655,6 +673,7 @@ yesimApp.post('/sync-pakistan-plans', async (c) => {
   const eurToPkr = Number((await getSetting(db, 'yesim_eur_to_pkr')) || 310) || 310;
   const now = new Date().toISOString();
   let saved = 0;
+  const keptIds: string[] = [];
 
   for (const p of plans) {
     const yesimPlanId = p.id != null ? String(p.id) : '';
@@ -690,15 +709,27 @@ yesimApp.post('/sync-pakistan-plans', async (c) => {
           now
         )
         .run();
+      keptIds.push(rowId);
       saved += 1;
     } catch (err) {
       console.error('pakistan plan upsert failed:', err);
     }
   }
 
+  try {
+    if (keptIds.length === 0) {
+      await db.prepare(`DELETE FROM pakistan_plans`).run();
+    } else {
+      const placeholders = keptIds.map(() => '?').join(',');
+      await db.prepare(`DELETE FROM pakistan_plans WHERE id NOT IN (${placeholders})`).bind(...keptIds).run();
+    }
+  } catch (err) {
+    console.error('pakistan plan prune failed:', err);
+  }
+
   return c.json({
     success: true,
-    message: `Saved ${saved} Pakistan plans to D1.`,
+    message: `Saved ${saved} Pakistan plans to D1 (name Pakistan + country Pakistan only).`,
     count: saved,
   });
 });
@@ -707,7 +738,8 @@ yesimApp.get('/pakistan-plans', async (c) => {
   const db = c.env.DB;
   await ensureYesimTables(db);
   const rows = await db.prepare(`SELECT * FROM pakistan_plans ORDER BY selling_price_pkr ASC, name ASC`).all<any>();
-  return c.json({ success: true, plans: rows.results || [], count: (rows.results || []).length });
+  const plans = (rows.results || []).filter(isPakistanPlan);
+  return c.json({ success: true, plans, count: plans.length });
 });
 
 yesimApp.post('/refresh-inventory', async (c) => {
