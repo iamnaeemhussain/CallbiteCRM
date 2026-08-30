@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   CardSim as SimCard,
+  ScanSearch,
   Package,
   UserCheck,
   Settings,
@@ -27,6 +28,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const navItems = [
     { to: '/', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/esims', label: 'eSIMs', icon: SimCard },
+    { to: '/sim-info', label: 'Sim info', icon: ScanSearch },
     { to: '/packages', label: 'Packages', icon: Package },
     { to: '/referrals', label: 'Referrals', icon: Share2 },
     { to: '/staff', label: 'Staff', icon: UserCheck },

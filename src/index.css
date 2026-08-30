@@ -49,14 +49,24 @@
 }
 
 @media print {
+  @page {
+    margin: 10mm;
+    size: A4;
+  }
+  html, body {
+    background: white !important;
+  }
   body * {
     visibility: hidden !important;
   }
   #esim-print-card,
-  #esim-print-card * {
+  #esim-print-card *,
+  #sim-info-print,
+  #sim-info-print * {
     visibility: visible !important;
   }
-  #esim-print-card {
+  #esim-print-card,
+  #sim-info-print {
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;
@@ -64,5 +74,9 @@
     background: white !important;
     box-shadow: none !important;
     border: none !important;
+  }
+  .print\\:hidden {
+    display: none !important;
+    visibility: hidden !important;
   }
 }
