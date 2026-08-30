@@ -5,7 +5,7 @@
 
 ## 1. PRODUCT OVERVIEW & PHILOSOPHY
 
-**Callbite Esim Customer Management Portal** is a production-grade, internal staff Customer 360 CRM system built specifically for Callbite's eSIM business operations.
+**Pak-tel.com Customer Management Portal** is a production-grade, internal staff Customer 360 CRM system built specifically for Callbite's eSIM business operations.
 
 ### Core Philosophy
 - **Internal Staff Operations ONLY**: No customer portal, no customer login, no customer-facing interfaces.

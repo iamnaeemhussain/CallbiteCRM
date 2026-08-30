@@ -78,7 +78,7 @@ export function createFallbackD1(): D1Database {
             { id: 10, name: 'Returning Customer', color: '#06b6d4' },
           ];
           else if (q.includes('from settings')) res = [
-            { key: 'company_name', value: 'Callbite Esim', description: '' },
+            { key: 'company_name', value: 'Pak-tel.com', description: '' },
             { key: 'currency_symbol', value: 'Rs.', description: '' },
             { key: 'currency_code', value: 'PKR', description: '' },
             { key: 'support_phone', value: '+923001234567', description: '' },

@@ -57,7 +57,7 @@ export const Settings: React.FC = () => {
 
   useEffect(() => {
     if (settings) {
-      setCompanyName(settings.company_name || 'Callbite Esim');
+      setCompanyName(settings.company_name || 'Pak-tel.com');
       setCurrencySymbolInput(settings.currency_symbol || 'Rs.');
       setCurrencyCode(settings.currency_code || 'PKR');
       setSupportPhone(settings.support_phone || '+923001234567');

@@ -25,6 +25,14 @@ export async function dropRetiredTables(db: D1Database) {
         console.error(`Failed to drop ${table}:`, err);
       }
     }
+    try {
+      await db
+        .prepare(`UPDATE settings SET value = 'Pak-tel.com', updated_at = ? WHERE key = 'company_name' AND value LIKE '%Callbite%'`)
+        .bind(new Date().toISOString())
+        .run();
+    } catch {
+      // ignore
+    }
     // Leave FKs off so eSIM rows still insert after customers is gone.
   } catch (err) {
     console.error('dropRetiredTables failed:', err);

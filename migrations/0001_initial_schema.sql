@@ -1,4 +1,4 @@
--- Initial Schema for Callbite Customer Management Portal (Callbite Esim)
+-- Initial Schema for Callbite Customer Management Portal (Pak-tel.com)
 
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,

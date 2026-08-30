@@ -290,7 +290,7 @@ esimsApp.post('/', async (c) => {
         body.customer_id || '',
         body.iccid.trim(),
         body.country_region || 'Pakistan',
-        body.provider || 'Callbite Partner',
+        body.provider || 'Pak-tel.com',
         validProviderId,
         body.package_name.trim(),
         validPackageId,

@@ -67,12 +67,12 @@ export const Login: React.FC = () => {
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20 mb-4">
               <SimCard className="w-8 h-8 stroke-[2.5]" />
             </div>
-            <h1 className="text-2xl font-extrabold text-white tracking-tight">Callbite Esim</h1>
+            <h1 className="text-2xl font-extrabold text-white tracking-tight">Pak-tel.com</h1>
             <p className="mt-1 text-xs font-semibold uppercase tracking-widest text-emerald-400">
-              Customer Management Portal
+              Staff eSIM Portal
             </p>
             <p className="mt-2 text-xs text-slate-400">
-              Secure internal access for Callbite operations & support staff
+              Secure internal access for Pak-tel.com operations & support staff
             </p>
           </div>
 
@@ -96,7 +96,7 @@ export const Login: React.FC = () => {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@callbite.com"
+                  placeholder="name@pak-tel.com"
                   className="w-full rounded-xl border border-slate-700 bg-slate-850 px-3.5 py-2.5 pl-10 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
                 />
               </div>

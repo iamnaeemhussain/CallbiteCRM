@@ -45,7 +45,7 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
   const [selectedPackageId, setSelectedPackageId] = useState('');
   const [iccid, setIccid] = useState('');
   const [countryRegion, setCountryRegion] = useState('Pakistan');
-  const [provider, setProvider] = useState('Callbite Partner');
+  const [provider, setProvider] = useState('Pak-tel.com');
   const [providerId, setProviderId] = useState('');
   const [packageName, setPackageName] = useState('');
   const [packageId, setPackageId] = useState('');
@@ -79,7 +79,7 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
       setSelectedCustomerId(esim.customer_id);
       setIccid(esim.iccid || '');
       setCountryRegion(esim.country_region || 'Pakistan');
-      setProvider(esim.provider || 'Callbite Partner');
+      setProvider(esim.provider || 'Pak-tel.com');
       setProviderId(esim.provider_id || '');
       setPackageName(esim.package_name || '');
       setPackageId(esim.package_id || '');
@@ -111,7 +111,7 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
       const generatedIccid = `890141032111185${Math.floor(1000 + Math.random() * 9000)}F`;
       setIccid(generatedIccid);
       setCountryRegion('Pakistan');
-      setProvider('Callbite Partner');
+      setProvider('Pak-tel.com');
       setProviderId('');
       setPackageName('');
       setPackageId('');
@@ -128,7 +128,7 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
       setExpiryDate(expStr);
 
       setStatus('Active');
-      setQrCodeData(`LPA:1$smdp.io$CALLBITE-${generatedIccid}`);
+      setQrCodeData(`LPA:1$smdp.io$PAKTEL-${generatedIccid}`);
       setQrInputMode('lpa');
       setQrImageUrl('');
       setApnInfo('APN: internet');
@@ -379,7 +379,7 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
               onChange={(e) => handleProviderSelect(e.target.value)}
               className="w-full text-sm rounded-xl border border-slate-300 px-3.5 py-2 text-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white font-medium"
             >
-              <option value="Callbite Partner">Callbite Partner</option>
+              <option value="Pak-tel.com">Pak-tel.com</option>
 
               <option value="Direct Carrier / Partner">Direct Carrier / Partner</option>
             </select>
@@ -553,7 +553,7 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
                 type="text"
                 value={qrCodeData}
                 onChange={(e) => setQrCodeData(e.target.value)}
-                placeholder="LPA:1$smdp.io$CALLBITE-..."
+                placeholder="LPA:1$smdp.io$PAKTEL-..."
                 className="w-full text-xs font-mono rounded-xl border border-slate-300 px-3.5 py-2 text-slate-900 bg-white"
               />
             </div>
@@ -630,7 +630,7 @@ export const EsimFormModal: React.FC<EsimFormModalProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  setQrCodeData(`LPA:1$smdp.io$CALLBITE-${iccid}`);
+                  setQrCodeData(`LPA:1$smdp.io$PAKTEL-${iccid}`);
                   setQrInputMode('lpa');
                   setQrImageUrl('');
                 }}

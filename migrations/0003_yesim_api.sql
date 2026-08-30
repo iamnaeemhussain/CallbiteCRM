@@ -1,4 +1,4 @@
--- Yesim Partner API tables for Callbite Esim (same D1 database: callbite-crm)
+-- Yesim Partner API tables for Pak-tel.com (same D1 database: callbite-crm)
 
 CREATE TABLE IF NOT EXISTS yesim_api_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -452,7 +452,7 @@ export const EsimApiBox: React.FC = () => {
             eSIM API Box
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Yesim Partner API console for Callbite Esim staff. Token is stored in the same D1 database (`settings.yesim_api_token`).
+            Yesim Partner API console for Pak-tel.com staff. Token is stored in the same D1 database (`settings.yesim_api_token`).
           </p>
         </div>
         <a

@@ -290,7 +290,7 @@ export const Staff: React.FC = () => {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@callbite.com"
+                placeholder="name@pak-tel.com"
                 className="w-full text-sm rounded-xl border border-slate-300 px-3.5 py-2 text-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
               />
             </div>

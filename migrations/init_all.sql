@@ -289,14 +289,14 @@ INSERT OR REPLACE INTO users (id, name, email, password, role, phone, status, av
 
 -- Default Settings & Tags
 INSERT OR REPLACE INTO settings (key, value, description, updated_at) VALUES
-('company_name', 'Callbite Esim', 'Portal branding name', '2026-08-23T00:00:00Z'),
+('company_name', 'Pak-tel.com', 'Portal branding name', '2026-08-23T00:00:00Z'),
 ('currency_symbol', 'Rs.', 'Default display currency symbol (PKR)', '2026-08-23T00:00:00Z'),
 ('currency_code', 'PKR', 'Default currency code', '2026-08-23T00:00:00Z'),
 ('support_phone', '+923001234567', 'Official WhatsApp support contact', '2026-08-23T00:00:00Z'),
 ('wa_template_renewal', 'Hello {customer_name}! Your {package_name} eSIM ({iccid}) is expiring on {expiry_date}. Would you like to renew it today for {selling_price} to stay connected seamlessly? Reply to confirm!', 'Template for renewal prompt', '2026-08-23T00:00:00Z'),
-('wa_template_expiry', 'Hi {customer_name}, friendly reminder from Callbite Esim that your eSIM plan will expire on {expiry_date}. Please contact us if you need more data or extension.', 'Template for expiry alert', '2026-08-23T00:00:00Z'),
+('wa_template_expiry', 'Hi {customer_name}, friendly reminder from Pak-tel.com that your eSIM plan will expire on {expiry_date}. Please contact us if you need more data or extension.', 'Template for expiry alert', '2026-08-23T00:00:00Z'),
 ('wa_template_confirmation', 'Thank you {customer_name}! Your eSIM renewal for {package_name} has been processed successfully. Your new expiry date is {expiry_date}. Safe travels!', 'Template for renewal success', '2026-08-23T00:00:00Z'),
-('wa_template_support', 'Hi {customer_name}, thank you for reaching out to Callbite Esim support regarding ticket #{ticket_id}. Our team is actively on it and will update you shortly.', 'Template for support response', '2026-08-23T00:00:00Z');
+('wa_template_support', 'Hi {customer_name}, thank you for reaching out to Pak-tel.com support regarding ticket #{ticket_id}. Our team is actively on it and will update you shortly.', 'Template for support response', '2026-08-23T00:00:00Z');
 
 INSERT OR REPLACE INTO tags (id, name, color, description) VALUES
 (1, 'VIP', '#8b5cf6', 'High volume and priority customer'),

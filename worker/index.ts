@@ -41,7 +41,7 @@ app.route('/api/yesim', yesimApp);
 app.get('/api/health', (c) => {
   return c.json({
     status: 'ok',
-    system: 'Callbite Esim Staff CRM',
+    system: 'Pak-tel.com Staff CRM',
     timestamp: new Date().toISOString(),
   });
 });

@@ -18,7 +18,7 @@ const SettingsContext = createContext<SettingsContextType | undefined>(undefined
 export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
   const [settings, setSettings] = useState<Record<string, string>>({
-    company_name: 'Callbite Esim',
+    company_name: 'Pak-tel.com',
     currency_symbol: 'Rs.',
     currency_code: 'PKR',
     support_phone: '+923001234567',
@@ -52,7 +52,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [user, refreshSettings]);
 
   const currencySymbol = settings.currency_symbol || 'Rs.';
-  const companyName = settings.company_name || 'Callbite Esim';
+  const companyName = settings.company_name || 'Pak-tel.com';
 
   const formatPrice = (amount: number | string | undefined | null) => {
     const num = Number(amount || 0);

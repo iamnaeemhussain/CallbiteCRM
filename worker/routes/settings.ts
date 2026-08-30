@@ -32,7 +32,7 @@ settingsApp.get('/', async (c) => {
       tags: tags.results || [],
     });
   } catch (err: any) {
-    return c.json({ success: true, settings: { company_name: 'Callbite Esim', currency_symbol: 'Rs.', currency_code: 'PKR', support_phone: '+923001234567' }, tags: [] });
+    return c.json({ success: true, settings: { company_name: 'Pak-tel.com', currency_symbol: 'Rs.', currency_code: 'PKR', support_phone: '+923001234567' }, tags: [] });
   }
 });
 

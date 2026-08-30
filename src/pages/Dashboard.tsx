@@ -78,7 +78,7 @@ export const Dashboard: React.FC = () => {
             </span>
             <span className="text-xs text-slate-400 font-mono">{new Date().toISOString().slice(0, 10)}</span>
           </div>
-          <h2 className="text-2xl font-black tracking-tight">Callbite Esim Management</h2>
+          <h2 className="text-2xl font-black tracking-tight">Pak-tel.com Management</h2>
           <p className="text-xs text-slate-400 mt-1 max-w-lg">
             Welcome {user?.name || 'staff'}. eSIM inventory from D1.
           </p>

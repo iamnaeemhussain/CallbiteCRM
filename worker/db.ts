@@ -237,7 +237,7 @@ export async function ensureDbInitialized(db: D1Database) {
       ('STF-005', 'Ali Raza', 'ali.raza@callbite.com', 'Support@123', 'SUPPORT_STAFF', '+923022223344', 'active', '2026-03-01T00:00:00Z', '2026-08-23T00:00:00Z', '2026-08-23T05:40:00Z');
 
       INSERT OR REPLACE INTO settings (key, value, description, updated_at) VALUES
-      ('company_name', 'Callbite Esim', 'Portal branding name', '2026-08-23T00:00:00Z'),
+      ('company_name', 'Pak-tel.com', 'Portal branding name', '2026-08-23T00:00:00Z'),
       ('currency_symbol', 'Rs.', 'Default display currency symbol (PKR)', '2026-08-23T00:00:00Z'),
       ('currency_code', 'PKR', 'Default currency code', '2026-08-23T00:00:00Z'),
       ('support_phone', '+923001234567', 'Official WhatsApp support contact', '2026-08-23T00:00:00Z');

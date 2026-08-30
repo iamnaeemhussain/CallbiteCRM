@@ -49,11 +49,11 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
     if (templateKey === 'renewal') {
       raw = settings.wa_template_renewal || 'Hello {customer_name}! Your {package_name} eSIM ({iccid}) is expiring on {expiry_date}. Would you like to renew it today to stay connected seamlessly?';
     } else if (templateKey === 'expiry') {
-      raw = settings.wa_template_expiry || 'Hi {customer_name}, friendly reminder from Callbite Esim that your eSIM plan will expire on {expiry_date}.';
+      raw = settings.wa_template_expiry || 'Hi {customer_name}, friendly reminder from Pak-tel.com that your eSIM plan will expire on {expiry_date}.';
     } else if (templateKey === 'confirmation') {
       raw = settings.wa_template_confirmation || 'Thank you {customer_name}! Your eSIM renewal for {package_name} has been processed successfully. Your new expiry date is {expiry_date}.';
     } else if (templateKey === 'support') {
-      raw = settings.wa_template_support || 'Hi {customer_name}, thank you for contacting Callbite Esim support regarding ticket #{ticket_id}. We are working on your request.';
+      raw = settings.wa_template_support || 'Hi {customer_name}, thank you for contacting Pak-tel.com support regarding ticket #{ticket_id}. We are working on your request.';
     } else {
       return customText;
     }

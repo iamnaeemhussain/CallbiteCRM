@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { Search, Download, Copy, Radio, ScanSearch } from 'lucide-react';
+import { Search, Download, Copy, Radio, ScanSearch, MessageSquare } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { useToast } from '../contexts/ToastContext';
@@ -66,6 +66,27 @@ function Fact({ label, value, mono }: { label: string; value: React.ReactNode; m
   );
 }
 
+function buildShareText(opts: { iccid?: string; imsi?: string; msisdn?: string; lpa?: string; iosLink?: string | null; passport?: string | null }) {
+  return [
+    'Pak-tel.com',
+    '',
+    'SIM Details:',
+    `ICCID: ${opts.iccid || '—'}`,
+    `IMSI: ${opts.imsi || '—'}`,
+    `MSISDN: ${opts.msisdn || '—'}`,
+    '',
+    'QR Code & Activation:',
+    '',
+    'QR Code String:',
+    opts.lpa || '—',
+    opts.iosLink ? `\niOS Tap Link:\n${opts.iosLink}` : '',
+    opts.passport ? `\neSIM Passport:\n${opts.passport}` : '',
+  ]
+    .filter((line) => line !== '')
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n');
+}
+
 export const SimInfo: React.FC = () => {
   const toast = useToast();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -122,12 +143,34 @@ export const SimInfo: React.FC = () => {
     }
   };
 
+  const shareText = useMemo(
+    () =>
+      buildShareText({
+        iccid: data?.iccid,
+        imsi: data?.imsi,
+        msisdn: data?.msisdn != null ? String(data.msisdn) : '',
+        lpa,
+        iosLink,
+        passport,
+      }),
+    [data, lpa, iosLink, passport]
+  );
+
   const handlePdf = () => {
     if (!data) {
       toast.error('Search an ICCID first.');
       return;
     }
     window.print();
+  };
+
+  const handleWhatsApp = async () => {
+    if (!data) {
+      toast.error('Search an ICCID first.');
+      return;
+    }
+    const waUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+    window.open(waUrl, '_blank', 'noopener,noreferrer');
   };
 
   const copyText = async (value: string, label: string) => {
@@ -152,16 +195,16 @@ export const SimInfo: React.FC = () => {
             <ScanSearch className="w-6 h-6 text-emerald-600" />
             Sim info
           </h2>
-          <p className="text-xs text-slate-500 mt-1">Look up live Yesim `/sim_info` by ICCID. Share as a clean PDF of this card only.</p>
+          <p className="text-xs text-slate-500 mt-1">Look up live Yesim `/sim_info` by ICCID. PDF and WhatsApp share only SIM details + QR activation.</p>
         </div>
-        <Button
-          variant="primary"
-          leftIcon={<Download className="w-4 h-4" />}
-          onClick={handlePdf}
-          disabled={!data}
-        >
-          Share as PDF
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="whatsapp" leftIcon={<MessageSquare className="w-4 h-4" />} onClick={handleWhatsApp} disabled={!data}>
+            WhatsApp Share
+          </Button>
+          <Button variant="primary" leftIcon={<Download className="w-4 h-4" />} onClick={handlePdf} disabled={!data}>
+            Share as PDF
+          </Button>
+        </div>
       </div>
 
       <form onSubmit={handleSearch} className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-card flex flex-col sm:flex-row gap-3 print:hidden">
@@ -189,14 +232,14 @@ export const SimInfo: React.FC = () => {
           <p className="text-xs text-slate-400 mt-1">Paste an ICCID and search the Yesim Partner API.</p>
         </div>
       ) : (
-        <div id="sim-info-print" className="rounded-[28px] border border-slate-200/80 bg-white shadow-card overflow-hidden">
-          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 px-6 py-5 text-white">
-            <div className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-emerald-300">Callbite Esim</div>
+        <div className="rounded-[28px] border border-slate-200/80 bg-white shadow-card overflow-hidden">
+          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 px-6 py-5 text-white print:hidden">
+            <div className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-emerald-300">Pak-tel.com</div>
             <h3 className="text-xl font-black tracking-tight mt-1">eSIM Info — {data.iccid || iccid}</h3>
           </div>
 
           <div className="p-6 space-y-6">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 print:hidden">
               <Fact label="SIM ID" value={simId != null ? String(simId) : '—'} />
               <Fact label="QR Status" value={String(qrStatus)} />
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -211,7 +254,7 @@ export const SimInfo: React.FC = () => {
               </div>
             </div>
 
-            <div className="rounded-3xl border border-slate-200 p-5 grid grid-cols-1 md:grid-cols-[220px_1fr] gap-6 items-center">
+            <div className="rounded-3xl border border-slate-200 p-5 grid grid-cols-1 md:grid-cols-[220px_1fr] gap-6 items-center print:hidden">
               <div className="flex flex-col items-center">
                 <div className="relative w-[180px] h-[180px]">
                   <svg viewBox="0 0 140 140" className="w-full h-full -rotate-90">
@@ -264,7 +307,7 @@ export const SimInfo: React.FC = () => {
               </div>
             </div>
 
-            <div>
+            <div className="print:hidden">
               <h4 className="text-sm font-black text-slate-900 mb-3">Plan Details</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 <Fact label="Plan ID" value={String(planId)} mono />
@@ -276,58 +319,60 @@ export const SimInfo: React.FC = () => {
               </div>
             </div>
 
-            <div>
-              <h4 className="text-sm font-black text-slate-900 mb-3">SIM Details</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Fact label="ICCID" value={data.iccid} mono />
-                <Fact label="IMSI" value={data.imsi} mono />
-                <Fact label="MSISDN" value={data.msisdn != null ? String(data.msisdn) : '—'} mono />
-                <Fact label="Is Deleted" value={yesNo(data.is_deleted ?? data.deleted)} />
-              </div>
-            </div>
-
-            <div>
-              <h4 className="text-sm font-black text-slate-900 mb-3">QR Code & Activation</h4>
-              <div className="rounded-3xl border border-slate-200 p-5 flex flex-col sm:flex-row gap-5 items-start bg-slate-50/40">
-                <div className="p-2 bg-white border border-slate-200 rounded-2xl shrink-0">
-                  {img ? (
-                    <img src={img} alt="eSIM QR" className="w-48 h-48 object-contain" />
-                  ) : (
-                    <canvas ref={canvasRef} className="rounded-lg" width={196} height={196} />
-                  )}
+            <div id="sim-info-print" className="space-y-6 bg-white">
+              <div className="hidden print:block text-[10px] font-extrabold uppercase tracking-[0.2em] text-emerald-700">Pak-tel.com</div>
+              <div>
+                <h4 className="text-sm font-black text-slate-900 mb-3">SIM Details</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <Fact label="ICCID" value={data.iccid} mono />
+                  <Fact label="IMSI" value={data.imsi} mono />
+                  <Fact label="MSISDN" value={data.msisdn != null ? String(data.msisdn) : '—'} mono />
                 </div>
-                <div className="flex-1 min-w-0 space-y-3 text-xs">
-                  <div>
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">QR Code String</div>
-                    <div className="font-mono break-all text-slate-800 bg-white border border-slate-100 rounded-xl p-3">
-                      {lpa || '—'}
-                    </div>
-                    {lpa && (
-                      <button
-                        type="button"
-                        className="mt-1 text-[11px] font-bold text-emerald-700 inline-flex items-center gap-1 print:hidden"
-                        onClick={() => copyText(lpa, 'Activation string copied.')}
-                      >
-                        <Copy className="w-3 h-3" /> Copy LPA
-                      </button>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-black text-slate-900 mb-3">QR Code & Activation</h4>
+                <div className="rounded-3xl border border-slate-200 p-5 flex flex-col sm:flex-row gap-5 items-start bg-slate-50/40">
+                  <div className="p-2 bg-white border border-slate-200 rounded-2xl shrink-0">
+                    {img ? (
+                      <img src={img} alt="eSIM QR" className="w-48 h-48 object-contain" />
+                    ) : (
+                      <canvas ref={canvasRef} className="rounded-lg" width={196} height={196} />
                     )}
                   </div>
-                  {iosLink && (
+                  <div className="flex-1 min-w-0 space-y-3 text-xs">
                     <div>
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">iOS Tap Link</div>
-                      <a href={iosLink} target="_blank" rel="noreferrer" className="text-emerald-700 break-all underline">
-                        {iosLink}
-                      </a>
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">QR Code String</div>
+                      <div className="font-mono break-all text-slate-800 bg-white border border-slate-100 rounded-xl p-3">
+                        {lpa || '—'}
+                      </div>
+                      {lpa && (
+                        <button
+                          type="button"
+                          className="mt-1 text-[11px] font-bold text-emerald-700 inline-flex items-center gap-1 print:hidden"
+                          onClick={() => copyText(lpa, 'Activation string copied.')}
+                        >
+                          <Copy className="w-3 h-3" /> Copy LPA
+                        </button>
+                      )}
                     </div>
-                  )}
-                  {passport && (
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">eSIM Passport</div>
-                      <a href={passport} target="_blank" rel="noreferrer" className="text-emerald-700 break-all underline">
-                        {passport}
-                      </a>
-                    </div>
-                  )}
+                    {iosLink && (
+                      <div>
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">iOS Tap Link</div>
+                        <a href={iosLink} target="_blank" rel="noreferrer" className="text-emerald-700 break-all underline">
+                          {iosLink}
+                        </a>
+                      </div>
+                    )}
+                    {passport && (
+                      <div>
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">eSIM Passport</div>
+                        <a href={passport} target="_blank" rel="noreferrer" className="text-emerald-700 break-all underline">
+                          {passport}
+                        </a>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
