@@ -272,8 +272,8 @@ export const Esims: React.FC = () => {
                           </div>
                         ) : (
                           <div>
-                            <div className="font-bold text-slate-900">{e.customer_name || 'Unassigned'}</div>
-                            <div className="font-mono text-slate-500 text-[11px]">{e.customer_phone || 'No number'}</div>
+                            <div className="font-bold text-slate-900">{e.holder_name || e.customer_name || 'Unassigned'}</div>
+                            <div className="font-mono text-slate-500 text-[11px]">{e.holder_phone || e.customer_phone || 'No number'}</div>
                             <button
                               type="button"
                               className="mt-1 text-[11px] font-bold text-emerald-700 inline-flex items-center gap-1"

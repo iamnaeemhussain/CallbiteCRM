@@ -128,21 +128,21 @@ export const EsimProfileModal: React.FC<EsimProfileModalProps> = ({ isOpen, onCl
     }
   }, [isOpen, lpa, isImageQr]);
 
+  const holderName = live?.holder_name || live?.customer_name || 'Unassigned';
+  const holderPhone = live?.holder_phone || live?.customer_phone || '';
+
   const shareText = useMemo(() => {
-    const name = live?.customer_name || 'Customer';
     return [
-      `Callbite Esim — ${name}`,
-      `ICCID: ${live?.iccid || ''}`,
-      `Used: ${fmtGb(used)} (${usedPct.toFixed(1)}%)`,
-      `Left: ${fmtGb(left)} (${leftPct.toFixed(1)}%)`,
-      `Total: ${fmtMb(total)}`,
-      `Activated: ${formatDate(live?.plan_activated_at || live?.activation_date, true)}`,
-      `Expires: ${formatDate(live?.plan_expired_at || live?.expiry_date, true)}`,
-      lpa ? `LPA: ${lpa}` : '',
+      'QR Code & Activation',
+      '',
+      'QR Code & String',
+      lpa || '—',
+      iosLink ? `\niOS Tap Link\n${iosLink}` : '',
+      passport ? `\neSIM Passport\n${passport}` : '',
     ]
       .filter(Boolean)
       .join('\n');
-  }, [live, used, left, total, usedPct, leftPct, lpa]);
+  }, [lpa, iosLink, passport]);
 
   const handleTopup = async () => {
     if (!selectedPlanId) {
@@ -176,20 +176,20 @@ export const EsimProfileModal: React.FC<EsimProfileModalProps> = ({ isOpen, onCl
       }
     } catch {}
     await navigator.clipboard.writeText(shareText);
-    toast.success('Profile copied. Paste into any app, or use Print → Save as PDF.');
+    toast.success('QR & activation copied. Paste into any app, or use PDF / Print.');
   };
 
   const handlePdf = () => {
     window.print();
   };
 
-  const waLink = getWhatsAppLink(live?.customer_phone, shareText);
+  const waLink = getWhatsAppLink(holderPhone, shareText);
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={live?.customer_name && live.customer_name !== 'Unassigned' ? live.customer_name : 'eSIM profile'}
+      title={holderName && holderName !== 'Unassigned' ? holderName : 'eSIM profile'}
       subtitle={live?.iccid}
       maxWidth="2xl"
       footer={
@@ -201,7 +201,7 @@ export const EsimProfileModal: React.FC<EsimProfileModalProps> = ({ isOpen, onCl
             <Button variant="outline" size="sm" leftIcon={<Share2 className="w-3.5 h-3.5" />} onClick={handleShare}>
               Share
             </Button>
-            {live?.customer_phone && (
+            {holderPhone && (
               <a href={waLink} target="_blank" rel="noreferrer">
                 <Button variant="whatsapp" size="sm" leftIcon={<MessageSquare className="w-3.5 h-3.5" />}>
                   WhatsApp
@@ -223,12 +223,12 @@ export const EsimProfileModal: React.FC<EsimProfileModalProps> = ({ isOpen, onCl
       {isLoading && !raw ? (
         <LoadingSpinner label="Fetching latest SIM info…" />
       ) : (
-        <div id="esim-print-card" className="space-y-5">
+        <div className="space-y-5">
           <div className="flex items-center justify-between">
             <div>
               <div className="text-[10px] font-bold uppercase text-slate-400">Holder</div>
-              <div className="text-base font-black text-slate-900">{live?.customer_name || 'Unassigned'}</div>
-              <div className="font-mono text-xs text-slate-500">{live?.customer_phone || 'No number'}</div>
+              <div className="text-base font-black text-slate-900">{holderName}</div>
+              <div className="font-mono text-xs text-slate-500">{holderPhone || 'No number'}</div>
             </div>
             <Button
               variant="ghost"
@@ -287,7 +287,7 @@ export const EsimProfileModal: React.FC<EsimProfileModalProps> = ({ isOpen, onCl
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 p-4 space-y-3">
+          <div id="esim-print-card" className="rounded-2xl border border-slate-200 p-4 space-y-3 bg-white">
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">QR Code & Activation</div>
             <div className="flex flex-col sm:flex-row gap-4 items-start">
               <div className="p-2 bg-white border border-slate-200 rounded-xl">

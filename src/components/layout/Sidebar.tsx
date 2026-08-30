@@ -29,6 +29,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
     { to: '/', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/customers', label: 'Customers', icon: Users },
     { to: '/esims', label: 'eSIMs', icon: SimCard },
+    { to: '/packages', label: 'Packages', icon: Package },
     { to: '/referrals', label: 'Referrals', icon: Share2 },
     { to: '/staff', label: 'Staff', icon: UserCheck },
     { to: '/esim-api-box', label: 'eSIM API Box', icon: Box },

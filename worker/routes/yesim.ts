@@ -48,6 +48,8 @@ async function ensureYesimTables(db: D1Database) {
     `ALTER TABLE esims ADD COLUMN data_used_mb REAL`,
     `ALTER TABLE esims ADD COLUMN ios_tap_link TEXT`,
     `ALTER TABLE esims ADD COLUMN esim_passport_url TEXT`,
+    `ALTER TABLE esims ADD COLUMN holder_name TEXT`,
+    `ALTER TABLE esims ADD COLUMN holder_phone TEXT`,
     `ALTER TABLE yesim_profiles ADD COLUMN esim_passport_url TEXT`,
   ]) {
     try {

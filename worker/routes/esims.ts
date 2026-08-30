@@ -7,10 +7,20 @@ const esimsApp = new Hono<{ Bindings: Env; Variables: { user: StaffUser } }>();
 
 esimsApp.use('*', authMiddleware);
 
+async function ensureHolderColumns(db: D1Database) {
+  for (const sql of [`ALTER TABLE esims ADD COLUMN holder_name TEXT`, `ALTER TABLE esims ADD COLUMN holder_phone TEXT`]) {
+    try {
+      await db.prepare(sql).run();
+    } catch {
+      // column already exists
+    }
+  }
+}
+
 esimsApp.put('/:id/holder', async (c) => {
   try {
     const db = c.env.DB;
-    const currentUser = c.get('user');
+    await ensureHolderColumns(db);
     const esimId = c.req.param('id');
     const body = await c.req.json<{ full_name?: string; whatsapp_number?: string }>();
     const fullName = (body.full_name || '').trim();
@@ -23,44 +33,17 @@ esimsApp.put('/:id/holder', async (c) => {
     if (!esim) return c.json({ success: false, error: 'eSIM not found.' }, 404);
 
     const now = new Date().toISOString();
-    const dummyIds = new Set(['', 'CUST-YESIM']);
-    let customerId = esim.customer_id as string | null;
+    await db
+      .prepare(`UPDATE esims SET holder_name = ?, holder_phone = ?, updated_at = ? WHERE id = ?`)
+      .bind(fullName, phone, now, esimId)
+      .run();
 
-    const existingCustomer = customerId
-      ? await db.prepare(`SELECT * FROM customers WHERE id = ? AND is_deleted = 0`).bind(customerId).first<any>()
-      : null;
-
-    if (!existingCustomer || dummyIds.has(String(customerId || ''))) {
-      const byPhone = await db
-        .prepare(`SELECT id FROM customers WHERE whatsapp_number = ? AND is_deleted = 0`)
-        .bind(phone)
-        .first<{ id: string }>();
-      if (byPhone) {
-        customerId = byPhone.id;
-        await db
-          .prepare(`UPDATE customers SET full_name = ?, updated_at = ?, last_activity_at = ? WHERE id = ?`)
-          .bind(fullName, now, now, customerId)
-          .run();
-      } else {
-        customerId = await generateId(db, 'customers', 'CUST', 1001);
-        await db
-          .prepare(
-            `INSERT INTO customers (id, full_name, whatsapp_number, phone_number, email, country, city, source, referred_by_customer_id, status, assigned_staff_id, internal_notes, is_deleted, created_at, updated_at, last_activity_at)
-             VALUES (?, ?, ?, NULL, NULL, 'Pakistan', NULL, 'Other', NULL, 'Active', ?, NULL, 0, ?, ?, ?)`
-          )
-          .bind(customerId, fullName, phone, currentUser.id, now, now, now)
-          .run();
-      }
-      await db.prepare(`UPDATE esims SET customer_id = ?, updated_at = ? WHERE id = ?`).bind(customerId, now, esimId).run();
-    } else {
-      customerId = existingCustomer.id;
-      await db
-        .prepare(`UPDATE customers SET full_name = ?, whatsapp_number = ?, updated_at = ?, last_activity_at = ? WHERE id = ?`)
-        .bind(fullName, phone, now, now, customerId)
-        .run();
-    }
-
-    return c.json({ success: true, message: 'User profile saved.', customer_id: customerId });
+    return c.json({
+      success: true,
+      message: 'Name saved for this ICCID.',
+      holder_name: fullName,
+      holder_phone: phone,
+    });
   } catch (err: any) {
     console.error('Assign holder error:', err);
     return c.json({ success: false, error: err.message || 'Failed to save user profile.' }, 500);
@@ -71,6 +54,7 @@ esimsApp.put('/:id/holder', async (c) => {
 esimsApp.get('/', async (c) => {
   try {
     const db = c.env.DB;
+    await ensureHolderColumns(db);
     const {
       search,
       status,
@@ -87,13 +71,13 @@ esimsApp.get('/', async (c) => {
     let query = `
       SELECT 
         e.*,
-        COALESCE(c.full_name, 'Unassigned') AS customer_name,
-        c.whatsapp_number AS customer_phone,
+        COALESCE(e.holder_name, c.full_name, 'Unassigned') AS customer_name,
+        COALESCE(e.holder_phone, c.whatsapp_number) AS customer_phone,
         u.name AS created_by_staff_name
       FROM esims e
-      JOIN customers c ON e.customer_id = c.id
+      LEFT JOIN customers c ON e.customer_id = c.id
       LEFT JOIN users u ON e.created_by_staff_id = u.id
-      WHERE e.is_deleted = 0 AND c.is_deleted = 0
+      WHERE e.is_deleted = 0
     `;
 
     const params: any[] = [];
@@ -115,7 +99,7 @@ esimsApp.get('/', async (c) => {
         c.full_name LIKE ? OR
         c.whatsapp_number LIKE ?
       )`;
-      params.push(s, s, s, s, s, s, s, s);
+      params.push(s, s, s, s, s, s, s, s, s, s);
     }
 
     if (status) {
